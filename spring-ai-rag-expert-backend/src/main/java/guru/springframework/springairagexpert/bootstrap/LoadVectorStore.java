@@ -1,23 +1,18 @@
 package guru.springframework.springairagexpert.bootstrap;
 
 import guru.springframework.springairagexpert.config.VectorStoreProperties;
+import guru.springframework.springairagexpert.services.DocumentLoaderService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.reader.tika.TikaDocumentReader;
-import org.springframework.ai.transformer.splitter.TextSplitter;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
-import java.util.List;
 
 @Component
 @Slf4j
 public class LoadVectorStore implements CommandLineRunner {
 
     @Autowired
-    VectorStore vectorStore;
+    DocumentLoaderService documentLoaderService;
 
     @Autowired
     VectorStoreProperties vectorStoreProperties;
@@ -25,21 +20,22 @@ public class LoadVectorStore implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
 
-            log.debug("Loading documents into vector store");
+        // Load startup documents — skipped automatically if already in the store
+        log.info("Loading startup documents");
+        vectorStoreProperties.getDocumentsToLoad().forEach(resource -> {
+            try {
+                String url = resource.getURI().toString();
+                if (documentLoaderService.isDocumentLoaded(url)) {
+                    log.info("Startup document already in store, skipping: {}", url);
+                } else {
+                    log.info("Loading startup document: {}", url);
+                    documentLoaderService.loadDocument(url);
+                }
+            } catch (Exception e) {
+                log.error("Failed to load startup document: {}", e.getMessage(), e);
+            }
+        });
 
-            vectorStoreProperties.getDocumentsToLoad().forEach(document -> {
-                log.debug("Loading document: {}", document.getFilename());
-
-                TikaDocumentReader documentReader = new TikaDocumentReader(document);
-                List<Document> documents = documentReader.get();
-
-                TextSplitter textSplitter = new TokenTextSplitter();
-
-                List<Document> splitDocuments = textSplitter.apply(documents);
-
-                vectorStore.add(splitDocuments);
-            });
-
-        log.debug("Vector store loaded");
+        log.info("Vector store ready. Documents loaded: {}", documentLoaderService.listDocuments().size());
     }
 }

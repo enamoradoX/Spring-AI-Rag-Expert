@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+﻿import { Component, OnInit, HostListener, ElementRef } from '@angular/core';
 import { ChatService } from './services/chat.service';
 import { DocumentService } from './services/document.service';
 
@@ -13,25 +13,71 @@ interface ChatMessage {
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
   title = 'Spring AI RAG Expert';
 
   // Chat
   messages: ChatMessage[] = [];
-  isLoading = false;
+  isChatLoading = false;
+
+  // Document upload
+  isDocumentLoading = false;
 
   // Shared input
   inputText = '';
   mode: 'chat' | 'document' = 'chat';
 
-  // Document feedback
-  documentMessage = '';
-  documentMessageType: 'success' | 'error' = 'success';
+  // Single unified status alert
+  statusMessage = '';
+  statusMessageType: 'success' | 'error' = 'success';
+  private statusTimer: any;
+
+  // Document management
+  loadedDocuments: string[] = [];
+  showDocuments = false;
 
   constructor(
     private chatService: ChatService,
-    private documentService: DocumentService
+    private documentService: DocumentService,
+    private elementRef: ElementRef
   ) {}
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: MouseEvent): void {
+    if (this.showDocuments && !this.elementRef.nativeElement.querySelector('.docs-toggle-wrapper')?.contains(event.target)) {
+      this.showDocuments = false;
+    }
+  }
+
+  ngOnInit(): void {
+    this.refreshDocuments();
+  }
+
+  private showStatus(message: string, type: 'success' | 'error') {
+    clearTimeout(this.statusTimer);
+    this.statusMessage = message;
+    this.statusMessageType = type;
+    this.statusTimer = setTimeout(() => { this.statusMessage = ''; }, 3200);
+  }
+
+  refreshDocuments(): void {
+    this.documentService.getDocuments().subscribe({
+      next: (docs) => { this.loadedDocuments = docs; },
+      error: () => {}
+    });
+  }
+
+  deleteDocument(url: string): void {
+    this.documentService.deleteDocument(url).subscribe({
+      next: (response) => {
+        this.showStatus(response.message, response.success ? 'success' : 'error');
+        if (response.success) { this.refreshDocuments(); }
+      },
+      error: () => {
+        this.showStatus('Failed to delete document.', 'error');
+      }
+    });
+  }
 
   get placeholder(): string {
     return this.mode === 'chat'
@@ -39,16 +85,18 @@ export class AppComponent {
       : 'Enter document URL (e.g., https://example.com/document.pdf)';
   }
 
+  get isLoading(): boolean {
+    return this.mode === 'chat' ? this.isChatLoading : this.isDocumentLoading;
+  }
+
   switchToDocument() {
     this.mode = 'document';
     this.inputText = '';
-    this.documentMessage = '';
   }
 
   switchToChat() {
     this.mode = 'chat';
     this.inputText = '';
-    this.documentMessage = '';
   }
 
   handleSend() {
@@ -61,60 +109,40 @@ export class AppComponent {
 
   askQuestion() {
     if (!this.inputText.trim()) return;
-
-    this.messages.push({
-      role: 'user',
-      content: this.inputText,
-      timestamp: new Date()
-    });
-
+    this.messages.push({ role: 'user', content: this.inputText, timestamp: new Date() });
     const currentQuestion = this.inputText;
     this.inputText = '';
-    this.isLoading = true;
-
+    this.isChatLoading = true;
     this.chatService.askQuestion(currentQuestion).subscribe({
       next: (response) => {
-        this.messages.push({
-          role: 'assistant',
-          content: response.answer,
-          timestamp: new Date()
-        });
-        this.isLoading = false;
+        this.messages.push({ role: 'assistant', content: response.answer, timestamp: new Date() });
+        this.isChatLoading = false;
       },
       error: () => {
-        this.messages.push({
-          role: 'assistant',
-          content: 'Sorry, I encountered an error. Please try again.',
-          timestamp: new Date()
-        });
-        this.isLoading = false;
+        this.messages.push({ role: 'assistant', content: 'Sorry, I encountered an error. Please try again.', timestamp: new Date() });
+        this.isChatLoading = false;
       }
     });
   }
 
   loadDocument() {
     if (!this.inputText.trim()) {
-      this.documentMessage = 'Please enter a valid document URL';
-      this.documentMessageType = 'error';
+      this.showStatus('Please enter a valid document URL', 'error');
       return;
     }
-
-    this.isLoading = true;
-    this.documentMessage = '';
-
+    this.isDocumentLoading = true;
     this.documentService.loadDocument(this.inputText).subscribe({
       next: (response) => {
-        this.documentMessage = response.message;
-        this.documentMessageType = response.success ? 'success' : 'error';
-        this.isLoading = false;
+        this.showStatus(response.message, response.success ? 'success' : 'error');
+        this.isDocumentLoading = false;
         if (response.success) {
           this.inputText = '';
+          this.refreshDocuments();
         }
       },
       error: () => {
-        this.documentMessage = 'Failed to load document. Please check the URL and try again.';
-        this.documentMessageType = 'error';
-        this.isLoading = false;
+        this.showStatus('Failed to load document. Please check the URL and try again.', 'error');
+        this.isDocumentLoading = false;
       }
     });
   }
