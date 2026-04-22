@@ -9,5 +9,4 @@ public class SpringAiRagExpertApplication {
     public static void main(String[] args) {
         SpringApplication.run(SpringAiRagExpertApplication.class, args);
     }
-
 }
