@@ -35,6 +35,8 @@ export class AppComponent implements OnInit {
   // Document management
   loadedDocuments: string[] = [];
   showDocuments = false;
+  isRefreshing = false;
+  deletingUrl = '';
 
   constructor(
     private chatService: ChatService,
@@ -67,16 +69,37 @@ export class AppComponent implements OnInit {
     });
   }
 
-  deleteDocument(url: string): void {
-    this.documentService.deleteDocument(url).subscribe({
-      next: (response) => {
-        this.showStatus(response.message, response.success ? 'success' : 'error');
-        if (response.success) { this.refreshDocuments(); }
-      },
-      error: () => {
-        this.showStatus('Failed to delete document.', 'error');
-      }
+  onRefreshClick(): void {
+    // Force animation restart by toggling off then on in next frame
+    this.isRefreshing = false;
+    requestAnimationFrame(() => {
+      this.isRefreshing = true;
+      this.documentService.getDocuments().subscribe({
+        next: (docs) => {
+          this.loadedDocuments = docs;
+          setTimeout(() => { this.isRefreshing = false; }, 600);
+        },
+        error: () => { this.isRefreshing = false; }
+      });
     });
+  }
+
+  deleteDocument(url: string): void {
+    this.deletingUrl = url;
+    // Wait for the fade-out animation to finish, then call the API
+    setTimeout(() => {
+      this.documentService.deleteDocument(url).subscribe({
+        next: (response) => {
+          this.deletingUrl = '';
+          this.showStatus(response.message, response.success ? 'success' : 'error');
+          if (response.success) { this.refreshDocuments(); }
+        },
+        error: () => {
+          this.deletingUrl = '';
+          this.showStatus('Failed to delete document.', 'error');
+        }
+      });
+    }, 350);
   }
 
   get placeholder(): string {
