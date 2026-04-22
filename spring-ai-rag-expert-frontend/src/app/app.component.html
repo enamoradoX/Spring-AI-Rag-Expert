@@ -41,11 +41,33 @@
       {{ mode === 'chat' ? '💬 Chat Mode' : '📄 Document Upload Mode' }}
     </div>
 
+    <!-- Document List Toggle -->
+    <div style="margin-bottom: 10px;">
+      <button class="btn btn-list" (click)="toggleDocumentList()">
+        {{ showDocumentList ? '▲ Hide Documents' : '📋 Manage Documents' }}
+      </button>
+    </div>
+
+    <!-- Document List -->
+    <div class="document-list" *ngIf="showDocumentList">
+      <div *ngIf="loadedDocuments.length === 0" class="no-docs">
+        No documents loaded yet.
+      </div>
+      <div *ngFor="let doc of loadedDocuments" class="document-item">
+        <span class="doc-name" [title]="doc">{{ doc }}</span>
+        <button class="btn btn-delete" (click)="deleteDocument(doc)">🗑 Delete</button>
+      </div>
+    </div>
+
     <!-- Document Feedback -->
     <div
       class="alert"
       *ngIf="documentMessage"
-      [ngClass]="documentMessageType === 'success' ? 'alert-success' : 'alert-error'">
+      [ngClass]="{
+    'alert-success': documentMessageType === 'success' && !documentAlreadyExists,
+    'alert-warning': documentAlreadyExists,
+    'alert-error': documentMessageType === 'error'
+  }">
       {{ documentMessage }}
     </div>
 
