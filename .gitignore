@@ -1,37 +1,77 @@
-HELP.md
-target/
-!.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
+# ===================================
+# Backend (Spring Boot)
+# ===================================
+spring-ai-rag-expert-backend/target/
+spring-ai-rag-expert-backend/.mvn/
+spring-ai-rag-expert-backend/.idea/
+spring-ai-rag-expert-backend/*.iml
+spring-ai-rag-expert-backend/*.iws
+spring-ai-rag-expert-backend/*.ipr
+spring-ai-rag-expert-backend/.classpath
+spring-ai-rag-expert-backend/.project
+spring-ai-rag-expert-backend/.settings/
+spring-ai-rag-expert-backend/.springBeans
+spring-ai-rag-expert-backend/.sts4-cache
+spring-ai-rag-expert-backend/build/
 
-### STS ###
-.apt_generated
-.classpath
-.factorypath
-.project
-.settings
-.springBeans
-.sts4-cache
+# ===================================
+# Frontend (Angular)
+# ===================================
+spring-ai-rag-expert-frontend/node_modules/
+spring-ai-rag-expert-frontend/dist/
+spring-ai-rag-expert-frontend/.angular/
+spring-ai-rag-expert-frontend/.sass-cache/
+spring-ai-rag-expert-frontend/coverage/
+spring-ai-rag-expert-frontend/tmp/
+spring-ai-rag-expert-frontend/out-tsc/
 
-### IntelliJ IDEA ###
-.idea
+# ===================================
+# Security - Secrets & Credentials
+# ===================================
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Certificates & Keys
+*.key
+*.pem
+*.p12
+*.jks
+*.crt
+*.cer
+
+# API Keys and credentials
+**/application-local.yml
+**/application-local.yaml
+**/application-local.properties
+**/secrets.properties
+**/secrets.yml
+
+# ===================================
+# Shared / Root Level
+# ===================================
+# Docker volumes (database data)
+volumes/
+
+# IDE files
+.idea/
 *.iws
 *.iml
 *.ipr
-
-### NetBeans ###
-/nbproject/private/
-/nbbuild/
-/dist/
-/nbdist/
-/.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
-
-### VS Code ###
 .vscode/
-.env
 
-### Docker Volumes ###
-volumes/
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Backup files
+*.bak
+*.swp
+*.swo
+*~
