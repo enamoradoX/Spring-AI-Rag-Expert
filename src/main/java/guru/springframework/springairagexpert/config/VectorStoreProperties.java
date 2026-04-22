@@ -6,14 +6,12 @@ import org.springframework.core.io.Resource;
 
 import java.util.List;
 
-/**
- * Created by jt, Spring Framework Guru.
- */
 @Configuration
 @ConfigurationProperties(prefix = "sfg.aiapp")
 public class VectorStoreProperties {
 
     private String vectorStorePath;
+
     private List<Resource> documentsToLoad;
 
     public String getVectorStorePath() {
