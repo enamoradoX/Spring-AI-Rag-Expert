@@ -4,22 +4,30 @@ import java.util.List;
 
 public interface DocumentLoaderService {
 
-    /**
-     * Load a single document from any source (classpath, file, http/https) into the vector store
-     * @param documentUrl The resource URL (e.g., "classpath:/doc.pdf", "https://example.com/doc.pdf", "file:/path/to/doc.pdf")
-     */
     void loadDocument(String documentUrl);
 
-    /**
-     * Load multiple documents from various sources into the vector store
-     * @param documentUrls List of resource URLs
-     */
     void loadDocuments(List<String> documentUrls);
 
-    /**
-     * Load a document with custom metadata
-     * @param documentUrl The resource URL
-     * @param metadata Custom metadata to attach to the document chunks
-     */
     void loadDocumentWithMetadata(String documentUrl, java.util.Map<String, Object> metadata);
+
+    /**
+     * Returns the list of all currently loaded document URLs.
+     */
+    List<String> listDocuments();
+
+    /**
+     * Deletes all vector store chunks associated with the given document URL.
+     */
+    void deleteDocument(String documentUrl);
+
+    /**
+     * Returns true if the document URL has already been loaded.
+     */
+    boolean isDocumentLoaded(String documentUrl);
+
+    /**
+     * Queries the vector store and rebuilds the in-memory registry
+     * so all persisted documents are visible regardless of when they were loaded.
+     */
+    void rebuildRegistryFromStore();
 }
