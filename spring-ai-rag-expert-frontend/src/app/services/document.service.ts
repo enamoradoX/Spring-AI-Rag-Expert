@@ -20,5 +20,15 @@ export class DocumentService {
       params: { url: documentUrl }
     });
   }
+
+  getDocuments(): Observable<string[]> {
+    return this.http.get<string[]>(this.apiUrl);
+  }
+
+  deleteDocument(documentUrl: string): Observable<DocumentLoadResponse> {
+    return this.http.delete<DocumentLoadResponse>(this.apiUrl, {
+      params: { url: documentUrl }
+    });
+  }
 }
 
