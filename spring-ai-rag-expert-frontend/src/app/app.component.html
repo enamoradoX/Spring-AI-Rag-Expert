@@ -1,17 +1,15 @@
-<div class="container" role="main">
+﻿<div class="container" role="main">
   <header>
     <h1>🤖 {{ title }}</h1>
     <p>AI-Powered Document Q&amp;A with RAG</p>
   </header>
-
   <!-- Chat Section -->
   <div class="chat-container">
     <div class="messages-container">
       <div *ngIf="messages.length === 0" class="empty-state">
         <p>👋 Welcome! Ask me anything about your documents.</p>
-        <p class="hint">Try: "What is the password?" or "Summarize the document"</p>
+        <p class="hint">Try: &quot;What is the password?&quot; or &quot;Summarize the document&quot;</p>
       </div>
-
       <div
         *ngFor="let message of messages"
         class="message"
@@ -22,8 +20,7 @@
         </div>
         <div class="message-content">{{ message.content }}</div>
       </div>
-
-      <div *ngIf="isLoading" class="message assistant-message loading">
+      <div *ngIf="isChatLoading" class="message assistant-message loading">
         <div class="message-header">
           <span class="message-role">🤖 Assistant</span>
         </div>
@@ -35,20 +32,32 @@
         </div>
       </div>
     </div>
-
-    <!-- Mode Indicator -->
-    <div class="mode-indicator" [ngClass]="mode === 'document' ? 'mode-document' : 'mode-chat'">
-      {{ mode === 'chat' ? '💬 Chat Mode' : '📄 Document Upload Mode' }}
+    <!-- Mode + Documents Row -->
+    <div class="mode-docs-row">
+      <div class="mode-indicator" [ngClass]="mode === 'document' ? 'mode-document' : 'mode-chat'">
+        {{ mode === 'chat' ? '💬 Chat Mode' : '📄 Document Upload Mode' }}
+      </div>
+      <div class="docs-toggle-wrapper">
+        <button class="btn btn-docs-toggle" (click)="showDocuments = !showDocuments">
+          📚 Documents ({{ loadedDocuments.length }})
+        </button>
+        <div class="docs-dropdown" *ngIf="showDocuments">
+          <div class="docs-dropdown-header">
+            <span>Loaded Documents</span>
+            <button class="btn-icon" (click)="refreshDocuments()" title="Refresh">🔄</button>
+          </div>
+          <div *ngIf="loadedDocuments.length === 0" class="no-documents">
+            No documents loaded yet.
+          </div>
+          <ul *ngIf="loadedDocuments.length > 0" class="document-list">
+            <li *ngFor="let doc of loadedDocuments" class="document-item">
+              <span class="document-url" title="{{ doc }}">📄 {{ doc }}</span>
+              <button class="btn-icon btn-icon-delete" (click)="deleteDocument(doc)" title="Delete">🗑️</button>
+            </li>
+          </ul>
+        </div>
+      </div>
     </div>
-
-    <!-- Document Feedback -->
-    <div
-      class="alert"
-      *ngIf="documentMessage"
-      [ngClass]="documentMessageType === 'success' ? 'alert-success' : 'alert-error'">
-      {{ documentMessage }}
-    </div>
-
     <!-- Input Section -->
     <div class="input-section">
       <div class="input-group">
@@ -60,28 +69,34 @@
           rows="3"
           [disabled]="isLoading"></textarea>
         <div class="button-group">
-          <!-- Send / Ask a Question button (top) -->
           <button
             class="btn"
             [ngClass]="mode === 'chat' ? 'btn-send' : 'btn-ask'"
             (click)="mode === 'chat' ? handleSend() : switchToChat()"
             [disabled]="isLoading || (mode === 'chat' && !inputText.trim())">
-            <span *ngIf="mode === 'chat'">{{ isLoading ? '⏳' : '📤' }} Send</span>
+            <span *ngIf="mode === 'chat'">{{ isChatLoading ? '⏳' : '📤' }} Send</span>
             <span *ngIf="mode === 'document'">💬 Ask a Question</span>
           </button>
-
-          <!-- Upload Document button (always bottom, always same label) -->
           <button
             class="btn btn-upload"
             (click)="mode === 'chat' ? switchToDocument() : handleSend()"
             [disabled]="isLoading || (mode === 'document' && !inputText.trim())">
-            {{ isLoading ? '⏳' : '📄' }} Upload Document
+            {{ isDocumentLoading ? '⏳' : '📄' }} Upload Document
           </button>
         </div>
       </div>
-      <p class="hint-text">Press Enter to send, Shift+Enter for new line</p>
+      <div class="hint-status-row">
+        <p class="hint-text">Press Enter to send, Shift+Enter for new line</p>
+        <div
+          class="status-alert"
+          *ngIf="statusMessage"
+          [ngClass]="statusMessageType === 'success' ? 'alert-success' : 'alert-error'">
+          {{ statusMessage }}
+        </div>
+      </div>
     </div>
   </div>
 </div>
-
 <router-outlet></router-outlet>
+
+
