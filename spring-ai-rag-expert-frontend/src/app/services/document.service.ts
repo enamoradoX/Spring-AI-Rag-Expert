@@ -5,7 +5,6 @@ import { Observable } from 'rxjs';
 export interface DocumentLoadResponse {
   message: string;
   success: boolean;
-  alreadyExists: boolean;
 }
 
 @Injectable({
@@ -19,16 +18,6 @@ export class DocumentService {
   loadDocument(documentUrl: string): Observable<DocumentLoadResponse> {
     return this.http.post<DocumentLoadResponse>(`${this.apiUrl}/load-single`, null, {
       params: { url: documentUrl }
-    });
-  }
-
-  listDocuments(): Observable<string[]> {
-    return this.http.get<string[]>(`${this.apiUrl}/list`);
-  }
-
-  deleteDocument(source: string): Observable<DocumentLoadResponse> {
-    return this.http.delete<DocumentLoadResponse>(`${this.apiUrl}/delete`, {
-      params: { source }
     });
   }
 }

@@ -28,10 +28,6 @@ export class AppComponent {
   documentMessage = '';
   documentMessageType: 'success' | 'error' = 'success';
 
-  documentAlreadyExists = false;
-
-  private dismissTimer: any = null;
-
   constructor(
     private chatService: ChatService,
     private documentService: DocumentService
@@ -96,44 +92,28 @@ export class AppComponent {
     });
   }
 
-  private showMessage(message: string, type: 'success' | 'error', alreadyExists = false) {
-    this.documentMessage = message;
-    this.documentMessageType = type;
-    this.documentAlreadyExists = alreadyExists;
-
-    // Clear any existing timer
-    if (this.dismissTimer) {
-      clearTimeout(this.dismissTimer);
-    }
-
-    // Auto-dismiss after 4 seconds
-    this.dismissTimer = setTimeout(() => {
-      this.documentMessage = '';
-      this.documentAlreadyExists = false;
-      this.dismissTimer = null;
-    }, 4000);
-  }
-
   loadDocument() {
     if (!this.inputText.trim()) {
-      this.showMessage('Please enter a valid document URL', 'error');
+      this.documentMessage = 'Please enter a valid document URL';
+      this.documentMessageType = 'error';
       return;
     }
 
     this.isLoading = true;
     this.documentMessage = '';
-    this.documentAlreadyExists = false;
 
     this.documentService.loadDocument(this.inputText).subscribe({
       next: (response) => {
-        this.showMessage(response.message, response.success ? 'success' : 'error', response.alreadyExists);
+        this.documentMessage = response.message;
+        this.documentMessageType = response.success ? 'success' : 'error';
         this.isLoading = false;
-        if (response.success && !response.alreadyExists) {
+        if (response.success) {
           this.inputText = '';
         }
       },
       error: () => {
-        this.showMessage('Failed to load document. Please check the URL and try again.', 'error');
+        this.documentMessage = 'Failed to load document. Please check the URL and try again.';
+        this.documentMessageType = 'error';
         this.isLoading = false;
       }
     });
@@ -144,35 +124,5 @@ export class AppComponent {
       event.preventDefault();
       this.handleSend();
     }
-  }
-
-  // Document management
-  loadedDocuments: string[] = [];
-  showDocumentList = false;
-
-  loadDocumentList() {
-    this.documentService.listDocuments().subscribe({
-      next: (docs) => this.loadedDocuments = docs,
-      error: () => console.error('Failed to load document list')
-    });
-  }
-
-  toggleDocumentList() {
-    this.showDocumentList = !this.showDocumentList;
-    if (this.showDocumentList) {
-      this.loadDocumentList();
-    }
-  }
-
-  deleteDocument(source: string) {
-    this.documentService.deleteDocument(source).subscribe({
-      next: (response) => {
-        this.showMessage(response.message, 'success');
-        this.loadDocumentList();
-      },
-      error: () => {
-        this.showMessage('Failed to delete document.', 'error');
-      }
-    });
   }
 }
