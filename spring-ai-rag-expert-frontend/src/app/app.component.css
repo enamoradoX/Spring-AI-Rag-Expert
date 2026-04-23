@@ -28,19 +28,7 @@ header p {
   opacity: 0.9;
 }
 
-/* Document Upload Section */
-.document-section {
-  margin-bottom: 30px;
-  text-align: center;
-}
-
-.document-upload {
-  margin-top: 20px;
-  padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
+/* Document Upload Section — removed (unused) */
 
 /* Buttons */
 .btn {
@@ -59,28 +47,6 @@ header p {
   cursor: not-allowed;
 }
 
-.btn-primary {
-  background-color: #667eea;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #5568d3;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
-}
-
-.btn-success {
-  background-color: #10b981;
-  color: white;
-  margin-left: 10px;
-}
-
-.btn-success:hover:not(:disabled) {
-  background-color: #059669;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
-}
 
 .btn-send {
   background-color: #667eea;
@@ -303,6 +269,11 @@ header p {
   white-space: nowrap;
 }
 
+.viewer-title-icon {
+  position: relative;
+  top: -1px;
+}
+
 .viewer-select {
   flex: 1;
   font-size: 0.85em;
@@ -374,6 +345,60 @@ header p {
   color: #64748b;
   flex-shrink: 0;
   border-radius: 0 0 12px 12px;
+}
+
+.viewer-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewer-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-zoom {
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #334155;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-zoom:hover:not(:disabled) {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.btn-zoom:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.zoom-label {
+  min-width: 40px;
+  text-align: center;
+  font-size: 0.82em;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+
+.zoom-label:hover {
+  color: #667eea;
 }
 
 /* ===================== EXISTING STYLES ===================== */
@@ -572,6 +597,24 @@ header p {
   margin-bottom: 10px;
 }
 
+/* Viewer header uses the same toggle but dropdown opens left-aligned */
+.viewer-docs-toggle .docs-dropdown {
+  left: 0;
+  right: auto;
+  width: 340px;
+}
+
+/* Highlight the currently loaded document in the list */
+.doc-item-active {
+  background-color: #ede9fe !important;
+  border-color: #c4b5fd !important;
+}
+
+.doc-item-active .document-url {
+  color: #6b21a8 !important;
+  font-weight: 600;
+}
+
 /* Documents Toggle */
 .docs-toggle-wrapper {
   position: relative;
@@ -599,6 +642,21 @@ header p {
 .docs-toggle-label {
   position: relative;
   top: 2px;
+}
+
+.docs-caret {
+  display: inline-block;
+  font-size: 14px;
+  margin-left: 1px;
+  transition: transform 0.2s ease;
+  vertical-align: middle;
+  line-height: 1;
+  position: relative;
+  top: -1px;
+}
+
+.docs-caret-open {
+  transform: rotate(180deg);
 }
 
 .btn-docs-toggle:hover {
@@ -752,5 +810,10 @@ header p {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 85%;
+  cursor: pointer;
+}
+
+.document-url:hover {
+  color: #3730a3;
 }
 
