@@ -30,4 +30,10 @@ public interface DocumentLoaderService {
      * so all persisted documents are visible regardless of when they were loaded.
      */
     void rebuildRegistryFromStore();
+
+    /**
+     * Returns the raw bytes of a document that was previously loaded from an HTTP(S) URL,
+     * or null if the URL was not loaded through the service (e.g. classpath resources).
+     */
+    byte[] getCachedBytes(String documentUrl);
 }

@@ -12,6 +12,7 @@ import org.springframework.ai.transformer.splitter.TextSplitter;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
@@ -21,7 +22,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
@@ -33,6 +33,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
     final VectorStore vectorStore;
     final ResourceLoader resourceLoader;
     final MilvusServiceClient milvusClient;
+    final RemoteDocumentResolver remoteDocumentResolver;
 
     @Value("${spring.ai.vectorstore.milvus.collectionName:vector_store}")
     String collectionName;
@@ -41,6 +42,32 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
 
     // Tracks loaded document URLs -> their vector store document IDs
     private final ConcurrentHashMap<String, List<String>> loadedDocuments = new ConcurrentHashMap<>();
+
+    // Caches raw bytes for HTTP(S) documents so the viewer can serve them without re-fetching
+    private final ConcurrentHashMap<String, byte[]> bytesCache = new ConcurrentHashMap<>();
+
+    /**
+     * For HTTP(S) URLs, fetches the raw bytes using a browser-like User-Agent so that
+     * servers (e.g. Yamaha brochure URLs) serve the actual file rather than an HTML
+     * redirect page.  Classpath / file URLs fall back to Spring's ResourceLoader.
+     */
+    private Resource fetchResource(String documentUrl) throws Exception {
+        if (documentUrl.startsWith("http://") || documentUrl.startsWith("https://")) {
+            RemoteDocumentResolver.ResolvedRemoteDocument resolved = remoteDocumentResolver.resolve(documentUrl);
+            byte[] bytes = resolved.bytes();
+            log.debug("Resolved remote document {} -> {} ({} bytes, {})",
+                    documentUrl, resolved.resolvedUrl(), bytes.length, resolved.mimeType());
+            bytesCache.put(documentUrl, bytes);
+            return new ByteArrayResource(bytes) {
+                @Override public String getFilename() {
+                    return resolved.filename();
+                }
+            };
+        }
+        Resource resource = resourceLoader.getResource(documentUrl);
+        if (!resource.exists()) throw new IllegalArgumentException("Resource not found: " + documentUrl);
+        return resource;
+    }
 
     @Override
     public boolean isDocumentLoaded(String documentUrl) {
@@ -60,6 +87,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
         }
         vectorStore.delete(ids);
         loadedDocuments.remove(documentUrl);
+        bytesCache.remove(documentUrl);
         log.info("Deleted document and {} chunks for: {}", ids.size(), documentUrl);
     }
 
@@ -122,12 +150,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
         }
 
         try {
-            Resource resource = resourceLoader.getResource(documentUrl);
-
-            if (!resource.exists()) {
-                log.error("Resource does not exist: {}", documentUrl);
-                throw new IllegalArgumentException("Resource not found: " + documentUrl);
-            }
+            Resource resource = fetchResource(documentUrl);
 
             TikaDocumentReader documentReader = new TikaDocumentReader(resource);
             List<Document> documents = documentReader.get();
@@ -146,7 +169,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
 
             List<String> ids = splitDocuments.stream()
                     .map(Document::getId)
-                    .collect(Collectors.toList());
+                    .toList();
             loadedDocuments.put(documentUrl, ids);
 
             log.info("Successfully loaded document from: {}", documentUrl);
@@ -185,12 +208,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
         }
 
         try {
-            Resource resource = resourceLoader.getResource(documentUrl);
-
-            if (!resource.exists()) {
-                log.error("Resource does not exist: {}", documentUrl);
-                throw new IllegalArgumentException("Resource not found: " + documentUrl);
-            }
+            Resource resource = fetchResource(documentUrl);
 
             TikaDocumentReader documentReader = new TikaDocumentReader(resource);
             List<Document> documents = documentReader.get();
@@ -209,7 +227,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
 
             List<String> ids = splitDocuments.stream()
                     .map(Document::getId)
-                    .collect(Collectors.toList());
+                    .toList();
             loadedDocuments.put(documentUrl, ids);
 
             log.info("Successfully loaded document with metadata from: {}", documentUrl);
@@ -219,5 +237,10 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
             log.error("Failed to load document from {}: {}", documentUrl, e.getMessage(), e);
             throw new RuntimeException("Failed to load document: " + documentUrl, e);
         }
+    }
+
+    @Override
+    public byte[] getCachedBytes(String documentUrl) {
+        return bytesCache.get(documentUrl);
     }
 }
