@@ -6,11 +6,13 @@ import { FormsModule } from '@angular/forms';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { PdfViewerComponent } from './pdf-viewer/pdf-viewer.component';
+import { DocxViewerComponent } from './docx-viewer/docx-viewer.component';
 
 @NgModule({
   declarations: [
     AppComponent,
-    PdfViewerComponent
+    PdfViewerComponent,
+    DocxViewerComponent
   ],
   imports: [
     BrowserModule,

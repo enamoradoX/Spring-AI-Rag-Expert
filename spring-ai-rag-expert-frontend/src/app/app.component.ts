@@ -2,6 +2,7 @@
 import { ChatService } from './services/chat.service';
 import { DocumentService } from './services/document.service';
 import { PdfViewerComponent } from './pdf-viewer/pdf-viewer.component';
+import { DocxViewerComponent } from './docx-viewer/docx-viewer.component';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -38,14 +39,16 @@ export class AppComponent implements OnInit {
   viewerContent = '';
   viewerLoading = false;
   viewerPdfUrl = '';
+  viewerDocxUrl = '';
+  /** Explicitly set type so *ngIf conditions never depend on URL-string parsing. */
+  viewerType: 'pdf' | 'docx' | 'text' | '' = '';
   lastAnswer = '';
   highlightedSources: string[] = [];
   pdfHighlights: string[] = [];
   viewerSegments: { text: string; highlighted: boolean }[] = [];
 
-  get viewerIsPdf(): boolean {
-    return this.viewerDocumentUrl.toLowerCase().endsWith('.pdf');
-  }
+  get viewerIsPdf(): boolean  { return this.viewerType === 'pdf';  }
+  get viewerIsDocx(): boolean { return this.viewerType === 'docx'; }
 
   // Document management
   loadedDocuments: string[] = [];
@@ -53,8 +56,10 @@ export class AppComponent implements OnInit {
   isRefreshing = false;
   deletingUrl = '';
   pdfHighlightCount = 0;
+  viewerZoom = 1.0;
 
   @ViewChild('pdfViewerRef') pdfViewerRef?: PdfViewerComponent;
+  @ViewChild('docxViewerRef') docxViewerRef?: DocxViewerComponent;
 
   constructor(
     private chatService: ChatService,
@@ -149,21 +154,62 @@ export class AppComponent implements OnInit {
   }
 
   loadViewerDocument(url: string): void {
-    if (!url) { this.viewerSegments = []; this.viewerContent = ''; this.viewerPdfUrl = ''; return; }
+    if (!url) {
+      this.viewerSegments = []; this.viewerContent = '';
+      this.viewerPdfUrl = ''; this.viewerDocxUrl = ''; this.viewerType = '';
+      return;
+    }
+
     this.viewerLoading = true;
+    this.viewerType = '';
     this.viewerSegments = [];
     this.viewerPdfUrl = '';
+    this.viewerDocxUrl = '';
 
-    if (url.toLowerCase().endsWith('.pdf')) {
+    const lower = url.toLowerCase();
+    const hasPdfExt  = lower.endsWith('.pdf');
+    const hasDocxExt = lower.endsWith('.docx');
+    const hasTextExt = lower.endsWith('.txt') || lower.endsWith('.doc');
+
+    if (hasPdfExt) {
+      this.applyViewerForUrl(url, 'pdf');
+    } else if (hasDocxExt) {
+      this.applyViewerForUrl(url, 'docx');
+    } else if (hasTextExt) {
+      this.applyViewerForUrl(url, 'text');
+    } else {
+      // Extensionless URL — ask the backend to detect the real type via Tika
+      this.documentService.getFileType(url).subscribe({
+        next: (ft) => {
+          const t: 'pdf' | 'docx' | 'text' = ft.type === 'pdf' ? 'pdf'
+                                            : ft.type === 'docx' ? 'docx'
+                                            : 'text';
+          this.applyViewerForUrl(url, t);
+        },
+        error: () => this.applyViewerForUrl(url, 'text')
+      });
+    }
+  }
+
+  private applyViewerForUrl(url: string, type: 'pdf' | 'docx' | 'text'): void {
+    this.viewerType = type;
+
+    if (type === 'pdf') {
       this.viewerPdfUrl = this.documentService.getRawDocumentUrl(url);
       this.viewerLoading = false;
       return;
     }
 
+    if (type === 'docx') {
+      this.viewerDocxUrl = this.documentService.getRawDocumentUrl(url);
+      this.viewerLoading = false;
+      return;
+    }
+
+    // text
     this.documentService.getDocumentContent(url).subscribe({
       next: (content) => {
         this.viewerContent = content;
-        // Prefer LLM-extracted highlights; fall back to raw source chunks
         const sources = this.pdfHighlights?.length > 0 ? this.pdfHighlights : this.highlightedSources;
         this.buildSegments(sources);
         this.viewerLoading = false;
@@ -243,9 +289,17 @@ export class AppComponent implements OnInit {
     return { normalized, toOriginal };
   }
 
+  zoomIn():    void { this.viewerZoom = Math.min(3.0, +(this.viewerZoom + 0.1).toFixed(1)); }
+  zoomOut():   void { this.viewerZoom = Math.max(0.5, +(this.viewerZoom - 0.1).toFixed(1)); }
+  resetZoom(): void { this.viewerZoom = 1.0; }
+
   scrollToFirstHighlight(): void {
     if (this.viewerIsPdf) {
       this.pdfViewerRef?.scrollToHighlight();
+      return;
+    }
+    if (this.viewerIsDocx) {
+      this.docxViewerRef?.scrollToHighlight();
       return;
     }
     setTimeout(() => {
@@ -275,27 +329,14 @@ export class AppComponent implements OnInit {
           const firstUrl = response.sourceDocumentUrls?.[0];
           if (firstUrl) {
             this.viewerDocumentUrl = firstUrl;
-            this.viewerLoading = true;
-            this.viewerSegments = [];
-            this.viewerPdfUrl = '';
-
-            if (firstUrl.toLowerCase().endsWith('.pdf')) {
-              this.viewerPdfUrl = this.documentService.getRawDocumentUrl(firstUrl);
-              this.pdfHighlightCount = 0;
-              this.viewerLoading = false;
-            } else {
-              this.documentService.getDocumentContent(firstUrl).subscribe({
-                next: (content) => {
-                  this.viewerContent = content;
-                  // Prefer LLM-extracted highlights; fall back to raw source chunks
-                  const sources = response.highlights?.length > 0 ? response.highlights : response.sources;
-                  this.buildSegments(sources);
-                  this.viewerLoading = false;
-                  this.scrollToFirstHighlight();
-                },
-                error: () => { this.viewerLoading = false; }
-              });
-            }
+            this.pdfHighlightCount = 0;
+            this.loadViewerDocument(firstUrl);
+            // Always schedule scroll-to-highlight after the viewer has had time to
+            // render.  For extensionless URLs (e.g. Yamaha bulletin) type detection
+            // is asynchronous, so use a longer delay than for .pdf/.docx URLs.
+            const scrollDelay = (firstUrl.toLowerCase().endsWith('.pdf') ||
+                                 firstUrl.toLowerCase().endsWith('.docx')) ? 400 : 1500;
+            setTimeout(() => this.scrollToFirstHighlight(), scrollDelay);
           } else if (this.viewerDocumentUrl) {
             const sources = this.pdfHighlights?.length > 0 ? this.pdfHighlights : this.highlightedSources;
             this.buildSegments(sources);
