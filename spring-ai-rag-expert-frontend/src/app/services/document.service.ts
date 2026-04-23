@@ -30,5 +30,16 @@ export class DocumentService {
       params: { url: documentUrl }
     });
   }
+
+  getDocumentContent(documentUrl: string): Observable<string> {
+    return this.http.get(`${this.apiUrl}/content`, {
+      params: { url: documentUrl },
+      responseType: 'text'
+    });
+  }
+
+  getRawDocumentUrl(documentUrl: string): string {
+    return `${this.apiUrl}/raw?url=${encodeURIComponent(documentUrl)}`;
+  }
 }
 

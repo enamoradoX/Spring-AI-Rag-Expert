@@ -1,4 +1,6 @@
 package guru.springframework.springairagexpert.model;
 
-public record Answer(String answer) {
+import java.util.List;
+
+public record Answer(String answer, List<String> sources, List<String> sourceDocumentUrls, List<String> highlights) {
 }
