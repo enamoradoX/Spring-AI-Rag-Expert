@@ -5,10 +5,12 @@ import { FormsModule } from '@angular/forms';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
+import { PdfViewerComponent } from './pdf-viewer/pdf-viewer.component';
 
 @NgModule({
   declarations: [
-    AppComponent
+    AppComponent,
+    PdfViewerComponent
   ],
   imports: [
     BrowserModule,
