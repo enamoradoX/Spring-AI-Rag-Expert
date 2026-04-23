@@ -16,8 +16,8 @@ spring:
         client:
           host: "localhost"
           port: 19530
-          username: "root"
-          password: "milvus"
+          username: ${MILVUS_USERNAME:root}
+          password: ${MILVUS_PASSWORD:milvus}
         databaseName: "default"
         collectionName: "vector_store"
         embeddingDimension: 1536
@@ -30,6 +30,7 @@ sfg:
     documentsToLoad:
       - classpath:/towvehicles.txt
       - classpath:/jiraTechnicalDocumentation.docx
+      - classpath:/resumeFinal.pdf
 #      # Sportsman 212 - Weight 3,458 lbs
 #      - https://yamahaoutboards.com/outboards/350-150-hp/in-line-4/f150-(i4)/pb_spt_open_212_f150xb_9-10-2020-occ
 #      # Sportsman 232 - Weight 5,001  lbs

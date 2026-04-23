@@ -1,103 +1,106 @@
-﻿<div class="container" role="main">
-  <header>
-    <h1>🤖 {{ title }}</h1>
-    <p>AI-Powered Document Q&amp;A with RAG</p>
-  </header>
-  <!-- Chat Section -->
-  <div class="chat-container">
-    <div class="messages-container">
-      <div *ngIf="messages.length === 0" class="empty-state">
-        <p>👋 Welcome! Ask me anything about your documents.</p>
-        <p class="hint">Try: &quot;What is the password?&quot; or &quot;Summarize the document&quot;</p>
-      </div>
-      <div
-        *ngFor="let message of messages"
-        class="message"
-        [ngClass]="message.role === 'user' ? 'user-message' : 'assistant-message'">
-        <div class="message-header">
-          <span class="message-role">{{ message.role === 'user' ? '👤 You' : '🤖 Assistant' }}</span>
-          <span class="message-time">{{ message.timestamp | date:'short' }}</span>
+﻿<div class="app-layout">
+  <div class="container" role="main">
+    <header>
+      <h1>🤖 {{ title }}</h1>
+      <p>AI-Powered Document Q&amp;A with RAG</p>
+    </header>
+    <!-- Chat Section -->
+    <div class="chat-container">
+      <div class="messages-container">
+        <div *ngIf="messages.length === 0" class="empty-state">
+          <p>👋 Welcome! Ask me anything about your documents.</p>
+          <p class="hint">Try: &quot;What is the password?&quot; or &quot;Summarize the document&quot;</p>
         </div>
-        <div class="message-content">{{ message.content }}</div>
-      </div>
-      <div *ngIf="isChatLoading" class="message assistant-message loading">
-        <div class="message-header">
-          <span class="message-role">🤖 Assistant</span>
+        <div
+          *ngFor="let message of messages"
+          class="message"
+          [ngClass]="message.role === 'user' ? 'user-message' : 'assistant-message'">
+          <div class="message-header">
+            <span class="message-role">{{ message.role === 'user' ? '👤 You' : '🤖 Assistant' }}</span>
+            <span class="message-time">{{ message.timestamp | date:'short' }}</span>
+          </div>
+          <div class="message-content">{{ message.content }}</div>
         </div>
-        <div class="message-content">
-          <span class="typing-indicator">
-            <span></span><span></span><span></span>
-          </span>
-          Thinking...
+        <div *ngIf="isChatLoading" class="message assistant-message loading">
+          <div class="message-header">
+            <span class="message-role">🤖 Assistant</span>
+          </div>
+          <div class="message-content">
+            <span class="typing-indicator">
+              <span></span><span></span><span></span>
+            </span>
+            Thinking...
+          </div>
         </div>
       </div>
-    </div>
-    <!-- Mode + Documents Row -->
-    <div class="mode-docs-row">
-      <div class="mode-indicator" [ngClass]="mode === 'document' ? 'mode-document' : 'mode-chat'">
-        {{ mode === 'chat' ? '💬 Chat Mode' : '📄 Document Upload Mode' }}
+      <!-- Mode + Documents Row -->
+      <div class="mode-docs-row">
+        <div class="mode-indicator" [ngClass]="mode === 'document' ? 'mode-document' : 'mode-chat'">
+          {{ mode === 'chat' ? '💬 Chat Mode' : '📄 Document Upload Mode' }}
+        </div>
+        <div class="docs-toggle-wrapper">
+          <button class="btn btn-docs-toggle" (click)="showDocuments = !showDocuments">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="flex-shrink:0">
+              <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-7-7z" fill="#94a3b8" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M13 2v7h7" fill="none" stroke="#64748b" stroke-width="1.5" stroke-linejoin="round"/>
+              <line x1="8" y1="13" x2="16" y2="13" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="8" y1="17" x2="13" y2="17" stroke="#64748b" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span class="docs-toggle-label">Documents ({{ loadedDocuments.length }})</span>
+          </button>
+          <div class="docs-dropdown" *ngIf="showDocuments">
+            <div class="docs-dropdown-header">
+              <span>Loaded Documents</span>
+              <button class="btn-icon btn-refresh-icon" [class.spinning]="isRefreshing" (click)="onRefreshClick()" title="Refresh">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+            </div>
+            <div *ngIf="loadedDocuments.length === 0" class="no-documents">
+              No documents loaded yet.
+            </div>
+            <ul *ngIf="loadedDocuments.length > 0" class="document-list">
+              <li *ngFor="let doc of loadedDocuments" class="document-item" [class.deleting]="deletingUrl === doc">
+                <span class="document-url" title="{{ doc }}">📄 {{ doc }}</span>
+                <button class="btn-icon btn-icon-delete" (click)="deleteDocument(doc)" title="Delete">✕</button>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
-      <div class="docs-toggle-wrapper">
-        <button class="btn btn-docs-toggle" (click)="showDocuments = !showDocuments">
-          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" style="flex-shrink:0">
-            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-7-7z" fill="#e0e7ff" stroke="#3730a3" stroke-width="1.5" stroke-linejoin="round"/>
-            <path d="M13 2v7h7" fill="none" stroke="#3730a3" stroke-width="1.5" stroke-linejoin="round"/>
-            <line x1="8" y1="13" x2="16" y2="13" stroke="#3730a3" stroke-width="1.5" stroke-linecap="round"/>
-            <line x1="8" y1="17" x2="13" y2="17" stroke="#3730a3" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-          <span class="docs-toggle-label">Documents ({{ loadedDocuments.length }})</span>
-        </button>
-        <div class="docs-dropdown" *ngIf="showDocuments">
-          <div class="docs-dropdown-header">
-            <span>Loaded Documents</span>
-            <button class="btn-icon btn-refresh-icon" [class.spinning]="isRefreshing" (click)="onRefreshClick()" title="Refresh">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="23 4 23 10 17 10"/>
-                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-              </svg>
+      <!-- Input Section -->
+      <div class="input-section">
+        <div class="input-group">
+          <textarea
+            class="form-control"
+            [(ngModel)]="inputText"
+            (keypress)="onKeyPress($event)"
+            [placeholder]="placeholder"
+            rows="3"
+            [disabled]="isLoading"></textarea>
+          <div class="button-group">
+            <button
+              class="btn"
+              [ngClass]="mode === 'chat' ? 'btn-send' : 'btn-ask'"
+              (click)="mode === 'chat' ? handleSend() : switchToChat()"
+              [disabled]="isLoading || (mode === 'chat' && !inputText.trim())">
+              <span *ngIf="mode === 'chat'">{{ isChatLoading ? '⏳' : '📤' }} Send</span>
+              <span *ngIf="mode === 'document'">💬 Ask a Question</span>
+            </button>
+            <button
+              class="btn btn-upload"
+              (click)="mode === 'chat' ? switchToDocument() : handleSend()"
+              [disabled]="isLoading || (mode === 'document' && !inputText.trim())">
+              {{ isDocumentLoading ? '⏳' : '📄' }} Upload Document
             </button>
           </div>
-          <div *ngIf="loadedDocuments.length === 0" class="no-documents">
-            No documents loaded yet.
-          </div>
-          <ul *ngIf="loadedDocuments.length > 0" class="document-list">
-            <li *ngFor="let doc of loadedDocuments" class="document-item" [class.deleting]="deletingUrl === doc">
-              <span class="document-url" title="{{ doc }}">📄 {{ doc }}</span>
-              <button class="btn-icon btn-icon-delete" (click)="deleteDocument(doc)" title="Delete">✕</button>
-            </li>
-          </ul>
         </div>
-      </div>
-    </div>
-    <!-- Input Section -->
-    <div class="input-section">
-      <div class="input-group">
-        <textarea
-          class="form-control"
-          [(ngModel)]="inputText"
-          (keypress)="onKeyPress($event)"
-          [placeholder]="placeholder"
-          rows="3"
-          [disabled]="isLoading"></textarea>
-        <div class="button-group">
-          <button
-            class="btn"
-            [ngClass]="mode === 'chat' ? 'btn-send' : 'btn-ask'"
-            (click)="mode === 'chat' ? handleSend() : switchToChat()"
-            [disabled]="isLoading || (mode === 'chat' && !inputText.trim())">
-            <span *ngIf="mode === 'chat'">{{ isChatLoading ? '⏳' : '📤' }} Send</span>
-            <span *ngIf="mode === 'document'">💬 Ask a Question</span>
-          </button>
-          <button
-            class="btn btn-upload"
-            (click)="mode === 'chat' ? switchToDocument() : handleSend()"
-            [disabled]="isLoading || (mode === 'document' && !inputText.trim())">
-            {{ isDocumentLoading ? '⏳' : '📄' }} Upload Document
-          </button>
+        <div class="hint-status-row">
+          <p class="hint-text">Press Enter to send, Shift+Enter for new line</p>
         </div>
-      </div>
-      <div class="hint-status-row">
-        <p class="hint-text">Press Enter to send, Shift+Enter for new line</p>
+        <!-- Status Alert -->
         <div
           class="status-alert"
           *ngIf="statusMessage"
@@ -107,7 +110,43 @@
       </div>
     </div>
   </div>
+  <!-- Document Viewer Pane -->
+  <div class="viewer-pane">
+    <div class="viewer-header">
+      <span class="viewer-title">📖 Document Viewer</span>
+      <select class="viewer-select" [(ngModel)]="viewerDocumentUrl" (ngModelChange)="loadViewerDocument($event)">
+        <option value="">— select a document —</option>
+        <option *ngFor="let doc of loadedDocuments" [value]="doc">{{ doc.split('/').pop() }}</option>
+      </select>
+    </div>
+    <div class="viewer-body">
+      <div *ngIf="!viewerDocumentUrl" class="viewer-empty">
+        Select a document above to view its contents.
+      </div>
+      <div *ngIf="viewerLoading" class="viewer-empty">
+        Loading document...
+      </div>
+      <!-- PDF: rendered via PDF.js with highlight support -->
+      <app-pdf-viewer
+        #pdfViewerRef
+        *ngIf="viewerDocumentUrl && !viewerLoading && viewerIsPdf"
+        [pdfUrl]="viewerPdfUrl"
+        [sources]="pdfHighlights"
+        [answerText]="lastAnswer"
+        (highlightCount)="pdfHighlightCount = $event">
+      </app-pdf-viewer>
+      <!-- Text / DOCX: rendered as highlighted segments -->
+      <div *ngIf="viewerDocumentUrl && !viewerLoading && !viewerIsPdf" class="viewer-content">
+        <ng-container *ngFor="let seg of viewerSegments">
+          <mark *ngIf="seg.highlighted" class="viewer-highlight">{{ seg.text }}</mark>
+          <span *ngIf="!seg.highlighted">{{ seg.text }}</span>
+        </ng-container>
+      </div>
+    </div>
+    <div class="viewer-footer" *ngIf="(viewerIsPdf ? pdfHighlightCount : highlightedSources.length) > 0 && viewerDocumentUrl">
+      <span>{{ viewerIsPdf ? pdfHighlightCount : highlightedSources.length }} passage(s) highlighted</span>
+      <button class="btn-icon" (click)="scrollToFirstHighlight()" title="Jump to highlight">↓ Jump</button>
+    </div>
+  </div>
 </div>
 <router-outlet></router-outlet>
-
-
