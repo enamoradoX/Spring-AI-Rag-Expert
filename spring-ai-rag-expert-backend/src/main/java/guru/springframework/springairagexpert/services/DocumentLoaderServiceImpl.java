@@ -22,7 +22,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @RequiredArgsConstructor
 @Service
@@ -170,7 +169,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
 
             List<String> ids = splitDocuments.stream()
                     .map(Document::getId)
-                    .collect(Collectors.toList());
+                    .toList();
             loadedDocuments.put(documentUrl, ids);
 
             log.info("Successfully loaded document from: {}", documentUrl);
@@ -228,7 +227,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
 
             List<String> ids = splitDocuments.stream()
                     .map(Document::getId)
-                    .collect(Collectors.toList());
+                    .toList();
             loadedDocuments.put(documentUrl, ids);
 
             log.info("Successfully loaded document with metadata from: {}", documentUrl);
