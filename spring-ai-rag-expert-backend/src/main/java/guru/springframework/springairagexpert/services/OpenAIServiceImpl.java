@@ -13,6 +13,7 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -36,9 +37,16 @@ public class OpenAIServiceImpl implements OpenAIService {
                              .build()
         );
 
-        List<String> contentList = documents.stream()
-                                            .map(Document::getText)
-                                            .toList();
+        List<String> contentList = documents == null ? List.of() : documents.stream()
+                                                            .map(doc -> doc.getText() != null ? doc.getText() : "")
+                                                            .filter(t -> !t.isBlank())
+                                                            .toList();
+
+        List<String> sourceUrls = documents == null ? List.of() : documents.stream()
+                .map(doc -> (String) doc.getMetadata().get("document_url"))
+                .filter(url -> url != null && !url.isBlank())
+                .distinct()
+                .toList();
 
         PromptTemplate promptTemplate = new PromptTemplate(ragPromptTemplate);
 
@@ -47,7 +55,49 @@ public class OpenAIServiceImpl implements OpenAIService {
         );
 
         ChatResponse response = chatModel.call(prompt);
+        String answerText = response.getResult().getOutput().getText();
 
-        return new Answer(response.getResult().getOutput().getText());
+        // Second LLM call: extract the exact verbatim passage(s) from the source documents
+        // that most directly support the answer. These are used for precise PDF highlighting.
+        List<String> highlights = extractHighlights(answerText, contentList);
+
+        return new Answer(answerText, contentList, sourceUrls, highlights);
+    }
+
+    /**
+     * Ask the LLM to find the verbatim sentence(s) in the source documents that
+     * best support the given answer. Returns them as a list (one sentence per entry).
+     */
+    private List<String> extractHighlights(String answer, List<String> sourceDocs) {
+        if (sourceDocs.isEmpty()) return List.of();
+
+        String extractPrompt = """
+                You are a document search assistant. Your only job is to find and copy exact text.
+
+                Given the ANSWER below, find the sentence or short passage in the SOURCE DOCUMENTS \
+                that most directly states or supports that answer.
+
+                Rules:
+                - Copy the text EXACTLY as it appears in the source — do not paraphrase or change any words.
+                - Return at most 2 passages, each on its own line.
+                - Do NOT include bullet points, numbers, labels, or any explanation — only the raw copied text.
+                - If no relevant passage exists, return an empty response.
+
+                ANSWER:
+                %s
+
+                SOURCE DOCUMENTS:
+                %s
+                """.formatted(answer, String.join("\n---\n", sourceDocs));
+
+        ChatResponse highlightResponse = chatModel.call(new Prompt(extractPrompt));
+        String raw = highlightResponse.getResult().getOutput().getText();
+        if (raw == null || raw.isBlank()) return List.of();
+
+        return Arrays.stream(raw.split("\n"))
+                .map(String::trim)
+                .filter(s -> s.length() > 10)
+                .limit(2)
+                .toList();
     }
 }

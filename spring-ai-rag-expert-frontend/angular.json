@@ -27,9 +27,11 @@
             "styles": [
               "src/styles.css"
             ],
-            "scripts": []
+            "scripts": [],
+            "allowedCommonJsDependencies": [
+              "pdfjs-dist"
+            ]
           },
-          "configurations": {
             "production": {
               "budgets": [
                 {

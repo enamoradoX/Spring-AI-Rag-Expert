@@ -8,6 +8,9 @@ export interface Question {
 
 export interface Answer {
   answer: string;
+  sources: string[];
+  sourceDocumentUrls: string[];
+  highlights: string[];
 }
 
 @Injectable({

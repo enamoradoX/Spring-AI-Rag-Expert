@@ -25,6 +25,10 @@ spring-ai-rag-expert-frontend/coverage/
 spring-ai-rag-expert-frontend/tmp/
 spring-ai-rag-expert-frontend/out-tsc/
 
+# Large generated PDF.js worker assets (installed via npm, not source code)
+spring-ai-rag-expert-frontend/src/assets/pdf.worker.min.js
+spring-ai-rag-expert-frontend/src/assets/pdf.worker.min.mjs
+
 # ===================================
 # Security - Secrets & Credentials
 # ===================================
