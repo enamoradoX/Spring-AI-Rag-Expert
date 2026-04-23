@@ -29,7 +29,8 @@
             ],
             "scripts": [],
             "allowedCommonJsDependencies": [
-              "pdfjs-dist"
+              "pdfjs-dist",
+              "docx-preview"
             ]
           },
           "configurations": {

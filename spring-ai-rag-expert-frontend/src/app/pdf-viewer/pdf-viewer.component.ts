@@ -14,6 +14,7 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
   @Input() pdfUrl = '';
   @Input() answerText = '';
   @Input() sources: string[] = [];
+  @Input() zoom = 1.0;
   @Output() highlightCount = new EventEmitter<number>();
   @ViewChild('container') containerRef!: ElementRef<HTMLDivElement>;
 
@@ -30,7 +31,7 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.isViewInit) return;
-    if (changes['pdfUrl']) {
+    if (changes['pdfUrl'] || changes['zoom']) {
       this.zone.runOutsideAngular(() => this.renderPdf());
     } else if ((changes['sources'] || changes['answerText']) && this.pages.length > 0) {
       this.zone.runOutsideAngular(() => this.drawAllHighlights());
@@ -49,7 +50,8 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum);
         const containerWidth = container.clientWidth || 580;
-        const scale = Math.min(containerWidth / page.getViewport({ scale: 1 }).width, 2);
+        const baseScale = containerWidth / page.getViewport({ scale: 1 }).width;
+        const scale = Math.min(baseScale, 2) * (this.zoom ?? 1.0);
         const viewport = page.getViewport({ scale });
 
         // Wrapper
@@ -98,59 +100,58 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
   }
 
   private drawAllHighlights(): void {
-    // ── Strategy ──
-    // If LLM-extracted verbatim highlights are available (sources[]), use them for
-    // direct phrase matching — these are short exact sentences from the document so
-    // our tokenized search finds them precisely.
-    // Fall back to answer-text weighted scoring only when no highlights are provided.
     if (this.sources?.length > 0) {
-      this.drawHighlightsFromSources(this.sources);
+      const found = this.drawHighlightsFromSources(this.sources);
+      // If the LLM-extracted passages couldn't be matched against PDF.js text
+      // (e.g. different character encoding between Tika and PDF.js), fall back
+      // to answer-text keyword scoring which is encoding-agnostic.
+      if (!found && this.answerText?.trim()) {
+        this.drawHighlightsFromAnswer(this.answerText.trim());
+      }
     } else if (this.answerText?.trim()) {
       this.drawHighlightsFromAnswer(this.answerText.trim());
     }
   }
 
   /**
-   * Direct phrase matching against LLM-extracted verbatim passages.
-   * Each source is a short sentence copied verbatim from the PDFBox text.
-   * We tokenize both sides the same way, join into a page token string, and
-   * search for every 4-word window from the passage — very precise.
+   * Match LLM-extracted verbatim passages against PDF.js text items.
+   * Returns true if at least one text item was highlighted.
+   *
+   * PDFBox (indexer) and PDF.js (renderer) produce different text, so we
+   * bridge the gap by tokenizing both sides identically (lowercase, strip
+   * punctuation, expand ligatures) then searching for:
+   *   1. The full tokenized passage as one substring  → most precise
+   *   2. Overlapping 3-word windows as fallback        → handles partial extraction diffs
+   *
+   * Items are highlighted only if they are directly covered by a match.
    */
-  private drawHighlightsFromSources(highlights: string[]): void {
-    // Clear all overlays
+  private drawHighlightsFromSources(highlights: string[]): boolean {
     for (const { overlay } of this.pages) {
       overlay.getContext('2d')!.clearRect(0, 0, overlay.width, overlay.height);
     }
+    if (!highlights?.length) return false;
 
-    // Each highlight may be a full multi-line section. Flatten all lines into tokens
-    // and build overlapping 4-word phrase windows for matching.
-    // Also build the vocabulary set for per-item relevance filtering.
-    const phrases = new Set<string>();
+    // Tokenize each highlight as one full string for exact matching,
+    // and also build 3-word windows as fallback.
+    const fullPassages: string[] = [];
+    const windowPhrases = new Set<string>();
     const highlightWords = new Set<string>();
 
     for (const h of highlights) {
-      // Treat each line of the section independently so intra-section line breaks
-      // don't create bogus cross-line phrase windows
-      const lines = h.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      for (const line of lines) {
-        const toks = this.tokenize(line);
-        // Significant vocab
-        for (const t of toks) {
-          if (t.length >= 3 && !STOPWORDS.has(t)) highlightWords.add(t);
-        }
-        // 4-word (or 3-word for short lines) phrase windows
-        const wSize = Math.min(4, toks.length);
-        if (wSize < 2) continue;
-        for (let i = 0; i <= toks.length - wSize; i++) {
-          phrases.add(toks.slice(i, i + wSize).join(' '));
-        }
+      const toks = this.tokenize(h);
+      for (const t of toks) {
+        if (t.length >= 3 && !STOPWORDS.has(t)) highlightWords.add(t);
+      }
+      if (toks.length >= 2) fullPassages.push(toks.join(' '));
+      // 3-word windows as fallback (smaller window = higher coverage, handles encoding differences)
+      const w = Math.min(3, toks.length);
+      for (let i = 0; i <= toks.length - w; i++) {
+        windowPhrases.add(toks.slice(i, i + w).join(' '));
       }
     }
 
-    if (phrases.size === 0) {
-      // Fall back to answer-text scoring if the LLM returned nothing useful
-      if (this.answerText?.trim()) this.drawHighlightsFromAnswer(this.answerText.trim());
-      return;
+    if (fullPassages.length === 0 && windowPhrases.size === 0) {
+      return false;
     }
 
     this.firstHighlightWrapper = null;
@@ -160,7 +161,7 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
       const ctx = overlay.getContext('2d')!;
       if (!textItems.length) continue;
 
-      // Build page token string with per-item positions
+      // Build one flat token string for the page with per-item start/end positions.
       const itemTokStrs: string[] = textItems.map((it: any) => this.tokenize(it.str ?? '').join(' '));
       let pageStr = '';
       const starts: number[] = [];
@@ -171,13 +172,13 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
         ends.push(pageStr.length);
       }
 
-      // Find all phrase match ranges on this page
+      // ── Pass 1: try full tokenized passage (most precise) ──
       const matchedRanges: [number, number][] = [];
-      for (const phrase of phrases) {
+      for (const passage of fullPassages) {
         let pos = 0;
-        while ((pos = pageStr.indexOf(phrase, pos)) !== -1) {
+        while ((pos = pageStr.indexOf(passage, pos)) !== -1) {
           if (pos === 0 || pageStr[pos - 1] === ' ') {
-            const end = pos + phrase.length;
+            const end = pos + passage.length;
             if (end >= pageStr.length || pageStr[end] === ' ') {
               matchedRanges.push([pos, end]);
             }
@@ -185,34 +186,39 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
           pos++;
         }
       }
+
+      // ── Pass 2: fallback to 5-word windows if no full match found ──
+      if (matchedRanges.length === 0) {
+        for (const phrase of windowPhrases) {
+          let pos = 0;
+          while ((pos = pageStr.indexOf(phrase, pos)) !== -1) {
+            if (pos === 0 || pageStr[pos - 1] === ' ') {
+              const end = pos + phrase.length;
+              if (end >= pageStr.length || pageStr[end] === ' ') {
+                matchedRanges.push([pos, end]);
+              }
+            }
+            pos++;
+          }
+        }
+      }
+
       if (matchedRanges.length === 0) continue;
 
-      // Merge overlapping/adjacent ranges and expand to include surrounding items
-      // up to a gap of 3 non-matching items — this captures the full section.
-      const mergedItemIndices = new Set<number>();
+      // Mark items directly covered by a match + bridge gaps of ≤ 3
+      const directHits = new Set<number>();
       for (let i = 0; i < textItems.length; i++) {
-        const s = starts[i], e = ends[i];
-        if (matchedRanges.some(([rs, re]) => e > rs && s < re)) {
-          mergedItemIndices.add(i);
+        if (matchedRanges.some(([rs, re]) => ends[i] > rs && starts[i] < re)) {
+          directHits.add(i);
         }
       }
-
-      // Expand: bridge gaps of up to 3 items between matched items (captures whole section)
-      const sorted = Array.from(mergedItemIndices).sort((a, b) => a - b);
-      const expanded = new Set<number>(sorted);
-      for (let k = 0; k < sorted.length - 1; k++) {
-        const gap = sorted[k + 1] - sorted[k];
-        if (gap <= 4) {
-          for (let fill = sorted[k] + 1; fill < sorted[k + 1]; fill++) expanded.add(fill);
-        }
-      }
-
-      for (const i of Array.from(expanded).sort((a, b) => a - b)) {
+      // Only highlight items that share a highlight word (prevents section
+      // headers / punctuation-only items from being coloured)
+      for (const i of directHits) {
         const item = textItems[i];
         if (!item.str?.trim()) continue;
-        // Only draw items that contain a highlight word (skip pure punctuation/whitespace items)
         const toks = this.tokenize(item.str);
-        if (!toks.some(t => highlightWords.has(t))) continue;
+        if (!toks.some((t: string) => highlightWords.has(t))) continue;
 
         this.drawHighlightRect(ctx, item, viewport);
         if (!this.firstHighlightWrapper) this.firstHighlightWrapper = overlay.parentElement;
@@ -224,6 +230,7 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
     if (this.firstHighlightWrapper) {
       setTimeout(() => this.firstHighlightWrapper!.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
     }
+    return highlightedCount > 0;
   }
 
   /**

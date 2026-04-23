@@ -13,7 +13,10 @@ import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -37,16 +40,47 @@ public class OpenAIServiceImpl implements OpenAIService {
                              .build()
         );
 
-        List<String> contentList = documents == null ? List.of() : documents.stream()
-                                                            .map(doc -> doc.getText() != null ? doc.getText() : "")
-                                                            .filter(t -> !t.isBlank())
-                                                            .toList();
+        // ── Group ranked chunks by source document URL ──────────────────────────────
+        // Preserves insertion order (rank order from vector store).
+        LinkedHashMap<String, List<Document>> docsByUrl = new LinkedHashMap<>();
+        if (documents != null) {
+            for (Document doc : documents) {
+                String url = (String) doc.getMetadata().get("document_url");
+                if (url != null && !url.isBlank()) {
+                    docsByUrl.computeIfAbsent(url, k -> new ArrayList<>()).add(doc);
+                }
+            }
+        }
 
-        List<String> sourceUrls = documents == null ? List.of() : documents.stream()
-                .map(doc -> (String) doc.getMetadata().get("document_url"))
-                .filter(url -> url != null && !url.isBlank())
-                .distinct()
+        // Primary document = the one with the most chunks in the top-K results.
+        // Ties are broken by first appearance (i.e. the document whose highest-ranked
+        // chunk appeared earliest).
+        String primaryUrl = docsByUrl.entrySet().stream()
+                .max(Comparator.comparingInt(e -> e.getValue().size()))
+                .map(Map.Entry::getKey)
+                .orElse(null);
+
+        // Source URLs: primary document first, rest in rank order.
+        List<String> sourceUrls = new ArrayList<>();
+        if (primaryUrl != null) sourceUrls.add(primaryUrl);
+        docsByUrl.keySet().stream()
+                .filter(u -> !u.equals(primaryUrl))
+                .forEach(sourceUrls::add);
+
+        // Full content list (all chunks, all docs) — used for the LLM answer prompt.
+        List<String> contentList = documents == null ? List.of() : documents.stream()
+                .map(doc -> doc.getText() != null ? doc.getText() : "")
+                .filter(t -> !t.isBlank())
                 .toList();
+
+        // Chunks belonging to the primary document — used for highlight extraction so
+        // the highlighted passages actually exist in the document the viewer shows.
+        List<String> primaryDocChunks = primaryUrl != null
+                ? docsByUrl.get(primaryUrl).stream()
+                        .map(doc -> doc.getText() != null ? doc.getText() : "")
+                        .filter(t -> !t.isBlank())
+                        .toList()
+                : contentList;
 
         PromptTemplate promptTemplate = new PromptTemplate(ragPromptTemplate);
 
@@ -57,9 +91,10 @@ public class OpenAIServiceImpl implements OpenAIService {
         ChatResponse response = chatModel.call(prompt);
         String answerText = response.getResult().getOutput().getText();
 
-        // Second LLM call: extract the exact verbatim passage(s) from the source documents
-        // that most directly support the answer. These are used for precise PDF highlighting.
-        List<String> highlights = extractHighlights(answerText, contentList);
+        // Second LLM call: extract the exact verbatim passage(s) from the PRIMARY source
+        // document's chunks. Scoping to the primary document ensures the highlighted
+        // passages will actually be found in the document the viewer is displaying.
+        List<String> highlights = extractHighlights(answerText, primaryDocChunks);
 
         return new Answer(answerText, contentList, sourceUrls, highlights);
     }

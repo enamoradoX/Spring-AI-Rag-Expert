@@ -7,6 +7,11 @@ export interface DocumentLoadResponse {
   success: boolean;
 }
 
+export interface DocumentFileType {
+  type: 'pdf' | 'docx' | 'text';
+  mimeType: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -40,6 +45,13 @@ export class DocumentService {
 
   getRawDocumentUrl(documentUrl: string): string {
     return `${this.apiUrl}/raw?url=${encodeURIComponent(documentUrl)}`;
+  }
+
+  /** Asks the backend to detect the file type via Tika magic-byte inspection. */
+  getFileType(documentUrl: string): Observable<DocumentFileType> {
+    return this.http.get<DocumentFileType>(`${this.apiUrl}/filetype`, {
+      params: { url: documentUrl }
+    });
   }
 }
 
