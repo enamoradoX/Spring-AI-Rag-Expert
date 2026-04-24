@@ -6,15 +6,20 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 
 import java.net.URI;
 import java.net.URLConnection;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RequiredArgsConstructor
 @RestController
@@ -22,9 +27,15 @@ import java.util.Map;
 @Slf4j
 public class DocumentContentController {
 
+    private static final Pattern S3_URI_PATTERN = Pattern.compile("s3://([^/]+)/(.+)");
+
     private final ResourceLoader resourceLoader;
     private final DocumentLoaderService documentLoaderService;
     private final RemoteDocumentResolver remoteDocumentResolver;
+
+    @Autowired(required = false)
+    private S3Client s3Client;
+
     private static final Tika TIKA = new Tika();
 
     /**
@@ -35,16 +46,30 @@ public class DocumentContentController {
      * Spring's ResourceLoader.
      */
     private byte[] fetchBytes(String url) throws Exception {
-        if (url.startsWith("http://") || url.startsWith("https://")) {
-            // Prefer the in-memory copy cached when the document was loaded — avoids
-            // re-fetching an external URL and ensures the viewer always gets the real
-            // PDF bytes (not an HTML redirect page that some servers return to bots).
+        if (url.startsWith("s3://")) {
+            // Check in-memory cache first (populated when document was loaded)
             byte[] cached = documentLoaderService.getCachedBytes(url);
             if (cached != null) {
                 log.debug("Serving {} bytes from cache for {}", cached.length, url);
                 return cached;
             }
-            // Not yet loaded — resolve landing pages (HTML) to their underlying PDF asset when possible.
+            // Fall back to live S3 download
+            if (s3Client == null) throw new IllegalStateException("S3 client is not configured");
+            Matcher m = S3_URI_PATTERN.matcher(url);
+            if (!m.matches()) throw new IllegalArgumentException("Invalid S3 URI: " + url);
+            String bucket = m.group(1);
+            String key = m.group(2);
+            log.debug("Fetching s3://{}/{} from S3", bucket, key);
+            return s3Client.getObjectAsBytes(
+                    GetObjectRequest.builder().bucket(bucket).key(key).build()
+            ).asByteArray();
+        }
+        if (url.startsWith("http://") || url.startsWith("https://")) {
+            byte[] cached = documentLoaderService.getCachedBytes(url);
+            if (cached != null) {
+                log.debug("Serving {} bytes from cache for {}", cached.length, url);
+                return cached;
+            }
             RemoteDocumentResolver.ResolvedRemoteDocument resolved = remoteDocumentResolver.resolve(url);
             log.debug("Resolved remote view request {} -> {} ({})", url, resolved.resolvedUrl(), resolved.mimeType());
             return resolved.bytes();
