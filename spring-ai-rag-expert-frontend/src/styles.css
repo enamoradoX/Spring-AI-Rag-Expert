@@ -1,1 +1,12 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global dark base */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #0f1117;
+  color: #dce3ee;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
