@@ -36,4 +36,15 @@ public interface DocumentLoaderService {
      * or null if the URL was not loaded through the service (e.g. classpath resources).
      */
     byte[] getCachedBytes(String documentUrl);
+
+    /**
+     * Stores raw bytes in the cache for a given URL (e.g. for S3 documents loaded externally).
+     */
+    void cacheBytes(String documentUrl, byte[] bytes);
+
+    /**
+     * Registers a document URL and its associated vector store chunk IDs
+     * so it appears in {@link #listDocuments()} and can be deleted later.
+     */
+    void registerDocumentIds(String documentUrl, List<String> ids);
 }

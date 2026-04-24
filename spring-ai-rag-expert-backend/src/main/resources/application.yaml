@@ -1,16 +1,9 @@
+#debug: true
+
 spring:
   application:
     name: spring-ai-rag-expert
-#Pass API key as environment variable, e.g. -DOPENAI_API_KEY=your-api-key
   ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-      embedding:
-       options:
-         model: text-embedding-3-small
-      chat:
-        options:
-          model: gpt-4-turbo
     vectorstore:
       milvus:
         client:
@@ -19,8 +12,6 @@ spring:
           username: ${MILVUS_USERNAME:root}
           password: ${MILVUS_PASSWORD:milvus}
         databaseName: "default"
-        collectionName: "vector_store"
-        embeddingDimension: 1536
         indexType: IVF_FLAT
         metricType: COSINE
         initialize-schema: true
@@ -40,3 +31,13 @@ sfg:
 #      - https://yamahaoutboards.com/outboards/xto-offshore/v8-5-6l/xf425/pb_spt_open-322_tw_lxf425usb2_8-26-2021_occ
 #      # Scout 380 LXF - Weight 19,443 lbs
 #      - https://yamahaoutboards.com/outboards/xto-offshore/v8-5-6l/xf425/pb_sct_380lxf_tr_xf425_8-30-2018_occ
+
+aws:
+  s3:
+    enabled: true
+    accessKeyId: ${S3_ACCESS_KEY_ID:OR_YOUR_OWN_ACCESS_KEY_ID}
+    secretAccessKey: ${S3_SECRET_ACCESS_KEY:OR_YOUR_OWN_SECRET_ACCESS_KEY}
+    bucketName: ${S3_BUCKET_NAME:OR_YOUR_OWN_BUCKET_NAME}
+    endpoint-override: ${S3_END_POINT_OVERRIDE:OR_YOUR_OWN_ENDPOINT_OVERRIDE}
+    path-style-access: true
+    region: us-east-1
