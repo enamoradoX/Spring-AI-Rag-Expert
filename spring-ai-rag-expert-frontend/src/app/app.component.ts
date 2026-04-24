@@ -1,6 +1,6 @@
 ﻿import { Component, OnInit, HostListener, ElementRef, ViewChild } from '@angular/core';
 import { ChatService } from './services/chat.service';
-import { DocumentService } from './services/document.service';
+import { DocumentService, S3Config } from './services/document.service';
 import { PdfViewerComponent } from './pdf-viewer/pdf-viewer.component';
 import { DocxViewerComponent } from './docx-viewer/docx-viewer.component';
 
@@ -27,7 +27,7 @@ export class AppComponent implements OnInit {
 
   // Shared input
   inputText = '';
-  mode: 'chat' | 'document' = 'chat';
+  mode: 'chat' | 'document' | 's3' = 'chat';
 
   // Single unified status alert
   statusMessage = '';
@@ -58,6 +58,11 @@ export class AppComponent implements OnInit {
   pdfHighlightCount = 0;
   viewerZoom = 1.0;
 
+  // S3 upload
+  isS3Loading = false;
+  s3Config: S3Config | null = null;
+  s3ConfigError = false;
+
   @ViewChild('pdfViewerRef') pdfViewerRef?: PdfViewerComponent;
   @ViewChild('docxViewerRef') docxViewerRef?: DocxViewerComponent;
 
@@ -76,6 +81,39 @@ export class AppComponent implements OnInit {
 
   ngOnInit(): void {
     this.refreshDocuments();
+    this.loadS3Config();
+  }
+
+  loadS3Config(): void {
+    this.documentService.getS3Config().subscribe({
+      next: (config) => { this.s3Config = config; this.s3ConfigError = false; },
+      error: () => { this.s3Config = null; this.s3ConfigError = true; }
+    });
+  }
+
+  toggleS3Panel(): void { this.switchToS3(); }
+
+  loadFromS3(): void {
+    if (!this.inputText.trim()) {
+      this.showStatus('Please enter an S3 key', 'error');
+      return;
+    }
+    this.isS3Loading = true;
+    this.documentService.loadFromS3(this.inputText.trim()).subscribe({
+      next: (response) => {
+        this.showStatus(response.message, response.success ? 'success' : 'error');
+        this.isS3Loading = false;
+        if (response.success) {
+          this.inputText = '';
+          this.switchToChat();
+          this.refreshDocuments();
+        }
+      },
+      error: () => {
+        this.showStatus('Failed to load from S3. Check the key and connection.', 'error');
+        this.isS3Loading = false;
+      }
+    });
   }
 
   private showStatus(message: string, type: 'success' | 'error') {
@@ -126,31 +164,24 @@ export class AppComponent implements OnInit {
   }
 
   get placeholder(): string {
-    return this.mode === 'chat'
-      ? 'Ask a question about your documents...'
-      : 'Enter document URL (e.g., https://example.com/document.pdf)';
+    if (this.mode === 'chat') return 'Ask a question about your documents...';
+    if (this.mode === 's3')   return 'Enter S3 key (e.g., docs/help/en-us/my-file.pdf)';
+    return 'Enter document URL (e.g., https://example.com/document.pdf)';
   }
 
   get isLoading(): boolean {
+    if (this.mode === 's3') return this.isS3Loading;
     return this.mode === 'chat' ? this.isChatLoading : this.isDocumentLoading;
   }
 
-  switchToDocument() {
-    this.mode = 'document';
-    this.inputText = '';
-  }
-
-  switchToChat() {
-    this.mode = 'chat';
-    this.inputText = '';
-  }
+  switchToDocument() { this.mode = 'document'; this.inputText = ''; }
+  switchToChat()     { this.mode = 'chat';     this.inputText = ''; }
+  switchToS3()       { this.mode = 's3';       this.inputText = ''; }
 
   handleSend() {
-    if (this.mode === 'chat') {
-      this.askQuestion();
-    } else {
-      this.loadDocument();
-    }
+    if (this.mode === 'chat')     this.askQuestion();
+    else if (this.mode === 's3')  this.loadFromS3();
+    else                          this.loadDocument();
   }
 
   loadViewerDocument(url: string): void {
