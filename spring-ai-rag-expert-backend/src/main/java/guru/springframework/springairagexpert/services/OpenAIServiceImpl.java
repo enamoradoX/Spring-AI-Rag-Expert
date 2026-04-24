@@ -3,6 +3,7 @@ package guru.springframework.springairagexpert.services;
 import guru.springframework.springairagexpert.model.Answer;
 import guru.springframework.springairagexpert.model.Question;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -22,6 +23,7 @@ import java.util.Map;
 
 @RequiredArgsConstructor
 @Service
+@Slf4j
 public class OpenAIServiceImpl implements OpenAIService {
 
     final ChatModel chatModel;
@@ -32,16 +34,20 @@ public class OpenAIServiceImpl implements OpenAIService {
 
     @Override
     public Answer getAnswer(Question question) {
+        log.info("Processing question: {}", question.question());
+        long start = System.currentTimeMillis();
 
+        log.debug("Searching vector store for relevant documents...");
         List<Document> documents = vectorStore.similaritySearch(
                 SearchRequest.builder()
                              .query(question.question())
                              .topK(5)
                              .build()
         );
+        log.info("Vector search returned {} chunks in {}ms",
+                documents == null ? 0 : documents.size(), System.currentTimeMillis() - start);
 
         // ── Group ranked chunks by source document URL ──────────────────────────────
-        // Preserves insertion order (rank order from vector store).
         LinkedHashMap<String, List<Document>> docsByUrl = new LinkedHashMap<>();
         if (documents != null) {
             for (Document doc : documents) {
@@ -52,29 +58,23 @@ public class OpenAIServiceImpl implements OpenAIService {
             }
         }
 
-        // Primary document = the one with the most chunks in the top-K results.
-        // Ties are broken by first appearance (i.e. the document whose highest-ranked
-        // chunk appeared earliest).
         String primaryUrl = docsByUrl.entrySet().stream()
                 .max(Comparator.comparingInt(e -> e.getValue().size()))
                 .map(Map.Entry::getKey)
                 .orElse(null);
+        log.info("Primary source document: {}", primaryUrl);
 
-        // Source URLs: primary document first, rest in rank order.
         List<String> sourceUrls = new ArrayList<>();
         if (primaryUrl != null) sourceUrls.add(primaryUrl);
         docsByUrl.keySet().stream()
                 .filter(u -> !u.equals(primaryUrl))
                 .forEach(sourceUrls::add);
 
-        // Full content list (all chunks, all docs) — used for the LLM answer prompt.
         List<String> contentList = documents == null ? List.of() : documents.stream()
                 .map(doc -> doc.getText() != null ? doc.getText() : "")
                 .filter(t -> !t.isBlank())
                 .toList();
 
-        // Chunks belonging to the primary document — used for highlight extraction so
-        // the highlighted passages actually exist in the document the viewer shows.
         List<String> primaryDocChunks = primaryUrl != null
                 ? docsByUrl.get(primaryUrl).stream()
                         .map(doc -> doc.getText() != null ? doc.getText() : "")
@@ -83,19 +83,22 @@ public class OpenAIServiceImpl implements OpenAIService {
                 : contentList;
 
         PromptTemplate promptTemplate = new PromptTemplate(ragPromptTemplate);
-
         Prompt prompt = promptTemplate.create(
                 Map.of("input", question.question(), "documents", String.join("\n", contentList))
         );
 
+        log.info("Sending prompt to chat model (this may take a while with local models)...");
+        long llmStart = System.currentTimeMillis();
         ChatResponse response = chatModel.call(prompt);
         String answerText = response.getResult().getOutput().getText();
+        log.info("Chat model responded in {}ms", System.currentTimeMillis() - llmStart);
 
-        // Second LLM call: extract the exact verbatim passage(s) from the PRIMARY source
-        // document's chunks. Scoping to the primary document ensures the highlighted
-        // passages will actually be found in the document the viewer is displaying.
+        log.info("Extracting highlights from primary document chunks...");
+        long hlStart = System.currentTimeMillis();
         List<String> highlights = extractHighlights(answerText, primaryDocChunks);
+        log.info("Highlight extraction completed in {}ms", System.currentTimeMillis() - hlStart);
 
+        log.info("Total question processing time: {}ms", System.currentTimeMillis() - start);
         return new Answer(answerText, contentList, sourceUrls, highlights);
     }
 

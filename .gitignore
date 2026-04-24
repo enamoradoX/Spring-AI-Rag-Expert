@@ -52,6 +52,10 @@ spring-ai-rag-expert-frontend/src/assets/pdf.worker.min.mjs
 **/secrets.properties
 **/secrets.yml
 
+# Personal and potentially sensitive sample documents
+**/resumeFinal.pdf
+**/jiraTechnicalDocumentation.docx
+
 # ===================================
 # Shared / Root Level
 # ===================================

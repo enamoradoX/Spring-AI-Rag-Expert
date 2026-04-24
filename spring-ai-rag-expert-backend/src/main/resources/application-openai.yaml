@@ -1,0 +1,27 @@
+# ── OpenAI profile ──────────────────────────────────────────────────────────
+# Activate with: -Dspring.profiles.active=openai  (this is the default)
+# Requires env var: OPENAI_API_KEY
+# ────────────────────────────────────────────────────────────────────────────
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration
+      - org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      embedding:
+        options:
+          model: text-embedding-3-small
+      chat:
+        options:
+          model: gpt-4-turbo
+    vectorstore:
+      milvus:
+        collectionName: "vector_store_openai"
+        embeddingDimension: 1536
+
+sfg:
+  aiapp:
+    chunk-size: 800  # text-embedding-3-small supports up to 8191 tokens
+

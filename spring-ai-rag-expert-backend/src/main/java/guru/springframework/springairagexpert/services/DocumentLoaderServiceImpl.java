@@ -38,6 +38,12 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
     @Value("${spring.ai.vectorstore.milvus.collectionName:vector_store}")
     String collectionName;
 
+    /** Tokens per chunk — must be <= embedding model's max context length.
+     *  OpenAI text-embedding-3-small: 8191 tokens (default 800 is fine).
+     *  mxbai-embed-large: 512 tokens max — use 400 to stay safely under. */
+    @Value("${sfg.aiapp.chunk-size:800}")
+    int chunkSize;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     // Tracks loaded document URLs -> their vector store document IDs
@@ -160,7 +166,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
             // Tag every chunk with the source URL for later registry reconstruction
             documents.forEach(doc -> doc.getMetadata().put(DOCUMENT_URL_KEY, documentUrl));
 
-            TextSplitter textSplitter = new TokenTextSplitter();
+            TextSplitter textSplitter = new TokenTextSplitter(chunkSize, 50, 5, 10000, true);
             List<Document> splitDocuments = textSplitter.apply(documents);
 
             log.debug("Split into {} chunks", splitDocuments.size());
@@ -220,7 +226,7 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
                 }
             });
 
-            TextSplitter textSplitter = new TokenTextSplitter();
+            TextSplitter textSplitter = new TokenTextSplitter(chunkSize, 50, 5, 10000, true);
             List<Document> splitDocuments = textSplitter.apply(documents);
 
             vectorStore.add(splitDocuments);
@@ -242,5 +248,16 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
     @Override
     public byte[] getCachedBytes(String documentUrl) {
         return bytesCache.get(documentUrl);
+    }
+
+    @Override
+    public void cacheBytes(String documentUrl, byte[] bytes) {
+        bytesCache.put(documentUrl, bytes);
+    }
+
+    @Override
+    public void registerDocumentIds(String documentUrl, List<String> ids) {
+        loadedDocuments.put(documentUrl, ids);
+        log.info("Registered external document '{}' with {} chunk(s)", documentUrl, ids.size());
     }
 }
