@@ -12,11 +12,19 @@ export interface DocumentFileType {
   mimeType: string;
 }
 
+export interface S3Config {
+  bucket: string;
+  endpoint: string;
+  region: string;
+  status: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class DocumentService {
   private apiUrl = 'http://localhost:8080/api/documents';
+  private s3ApiUrl = 'http://localhost:8080/api/s3';
 
   constructor(private http: HttpClient) { }
 
@@ -24,6 +32,14 @@ export class DocumentService {
     return this.http.post<DocumentLoadResponse>(`${this.apiUrl}/load-single`, null, {
       params: { url: documentUrl }
     });
+  }
+
+  loadFromS3(key: string): Observable<DocumentLoadResponse> {
+    return this.http.post<DocumentLoadResponse>(`${this.s3ApiUrl}/load`, { key });
+  }
+
+  getS3Config(): Observable<S3Config> {
+    return this.http.get<S3Config>(`${this.s3ApiUrl}/config`);
   }
 
   getDocuments(): Observable<string[]> {
@@ -47,7 +63,6 @@ export class DocumentService {
     return `${this.apiUrl}/raw?url=${encodeURIComponent(documentUrl)}`;
   }
 
-  /** Asks the backend to detect the file type via Tika magic-byte inspection. */
   getFileType(documentUrl: string): Observable<DocumentFileType> {
     return this.http.get<DocumentFileType>(`${this.apiUrl}/filetype`, {
       params: { url: documentUrl }
