@@ -8,7 +8,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 
 @Component({
   selector: 'app-pdf-viewer',
-  template: `<div #container style="width:100%"></div>`
+  // The scaler div is the scroll container — its content always reflects
+  // the true rendered size so scrollbars work correctly at any zoom level.
+  template: `<div #scaler style="width:100%; overflow-x:auto;"></div>`
 })
 export class PdfViewerComponent implements OnChanges, AfterViewInit {
   @Input() pdfUrl = '';
@@ -16,11 +18,14 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
   @Input() sources: string[] = [];
   @Input() zoom = 1.0;
   @Output() highlightCount = new EventEmitter<number>();
-  @ViewChild('container') containerRef!: ElementRef<HTMLDivElement>;
+  @ViewChild('scaler') scalerRef!: ElementRef<HTMLDivElement>;
 
   private isViewInit = false;
+  private renderedZoom = 1.0;
+  private activeDiv: HTMLDivElement | null = null;
   private pages: { canvas: HTMLCanvasElement; overlay: HTMLCanvasElement; textItems: any[]; viewport: any }[] = [];
   private firstHighlightWrapper: HTMLElement | null = null;
+  private zoomDebounceTimer: any = null;  // debounce handle for zoom-triggered re-renders
 
   constructor(private zone: NgZone) {}
 
@@ -31,71 +36,116 @@ export class PdfViewerComponent implements OnChanges, AfterViewInit {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.isViewInit) return;
-    if (changes['pdfUrl'] || changes['zoom']) {
+
+    if (changes['pdfUrl']) {
+      // New document — re-render immediately
+      clearTimeout(this.zoomDebounceTimer);
       this.zone.runOutsideAngular(() => this.renderPdf());
-    } else if ((changes['sources'] || changes['answerText']) && this.pages.length > 0) {
+    } else if (changes['zoom']) {
+      // Instant CSS scale for immediate visual feedback while user is still clicking
+      if (this.activeDiv) {
+        const ratio = (this.zoom ?? 1.0) / this.renderedZoom;
+        Object.assign(this.activeDiv.style, {
+          transform: `scale(${ratio})`,
+          transformOrigin: 'top left',
+          transition: 'transform 0.1s ease'
+        });
+      }
+      // Debounce the actual re-render — only fires 300ms after user stops zooming
+      clearTimeout(this.zoomDebounceTimer);
+      this.zoomDebounceTimer = setTimeout(() => {
+        this.zone.runOutsideAngular(() => this.renderPdf());
+      }, 300);
+    }
+
+    if ((changes['sources'] || changes['answerText']) && this.pages.length > 0) {
       this.zone.runOutsideAngular(() => this.drawAllHighlights());
     }
   }
 
   private async renderPdf(): Promise<void> {
-    const container = this.containerRef?.nativeElement;
-    if (!container || !this.pdfUrl) return;
-    container.innerHTML = '';
-    this.pages = [];
+    const scaler = this.scalerRef?.nativeElement;
+    if (!scaler || !this.pdfUrl) return;
+
+    const newDiv = document.createElement('div');
+    newDiv.style.cssText = 'width:100%; opacity:0;';
+    scaler.appendChild(newDiv);
+    const newPages: { canvas: HTMLCanvasElement; overlay: HTMLCanvasElement; textItems: any[]; viewport: any }[] = [];
+    const oldDiv = this.activeDiv;
 
     try {
       const pdf = await (pdfjsLib as any).getDocument({ url: this.pdfUrl, withCredentials: true }).promise;
+      const containerWidth = scaler.clientWidth || 580;
 
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum);
-        const containerWidth = container.clientWidth || 580;
         const baseScale = containerWidth / page.getViewport({ scale: 1 }).width;
         const scale = Math.min(baseScale, 2) * (this.zoom ?? 1.0);
         const viewport = page.getViewport({ scale });
 
-        // Wrapper
         const wrapper = document.createElement('div');
         Object.assign(wrapper.style, {
-          position: 'relative', width: viewport.width + 'px', height: viewport.height + 'px',
-          margin: '0 auto 16px auto', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', background: 'white'
+          position: 'relative',
+          width: viewport.width + 'px',
+          height: viewport.height + 'px',
+          margin: '0 auto 16px auto',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          background: 'white',
+          opacity: '0',
+          transition: 'opacity 0.2s ease'
         });
 
-        // Main canvas — PDF content
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         Object.assign(canvas.style, { position: 'absolute', top: '0', left: '0' });
         wrapper.appendChild(canvas);
 
-        // Overlay canvas — highlight rectangles drawn here
         const overlay = document.createElement('canvas');
         overlay.width = viewport.width;
         overlay.height = viewport.height;
         Object.assign(overlay.style, {
-          position: 'absolute', top: '0', left: '0',
-          pointerEvents: 'none', zIndex: '2'
+          position: 'absolute', top: '0', left: '0', pointerEvents: 'none', zIndex: '2'
         });
         wrapper.appendChild(overlay);
+        newDiv.appendChild(wrapper);
 
-        container.appendChild(wrapper);
-
-        // Render PDF content
         await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
-
-        // Collect text items with their positions
         const textContent = await page.getTextContent();
-        this.pages.push({ canvas, overlay, textItems: textContent.items, viewport });
+        newPages.push({ canvas, overlay, textItems: textContent.items, viewport });
+
+        // Reveal this page immediately — no waiting for all pages
+        requestAnimationFrame(() => { wrapper.style.opacity = '1'; });
+
+        // After PAGE 1 is ready: swap divs so content appears without any blank gap
+        if (pageNum === 1) {
+          this.activeDiv = newDiv;
+          requestAnimationFrame(() => {
+            newDiv.style.transition = 'opacity 0.2s ease';
+            newDiv.style.opacity = '1';
+            if (oldDiv) {
+              oldDiv.style.transition = 'opacity 0.2s ease';
+              oldDiv.style.opacity = '0';
+              setTimeout(() => oldDiv.remove(), 220);
+            }
+          });
+        }
       }
+
+      this.pages = newPages;
+      this.renderedZoom = this.zoom ?? 1.0;
 
       if (this.answerText || this.sources?.length > 0) {
         this.drawAllHighlights();
       }
     } catch (e: any) {
+      newDiv.remove();
       console.error('[PdfViewer] Error:', e?.message || e);
-      container.innerHTML = `<p style="color:#ef4444;padding:16px;font-size:13px">
-        Failed to load PDF: ${e?.message || 'Unknown error'}
-      </p>`;
+      if (this.activeDiv) {
+        this.activeDiv.innerHTML = `<p style="color:#ef4444;padding:16px;font-size:13px">
+          Failed to load PDF: ${e?.message || 'Unknown error'}
+        </p>`;
+      }
     }
   }
 
