@@ -46,13 +46,13 @@ public class DocumentContentController {
      * Spring's ResourceLoader.
      */
     private byte[] fetchBytes(String url) throws Exception {
+        byte[] cached = documentLoaderService.getCachedBytes(url);
+        if (cached != null) {
+            log.debug("Serving {} bytes from cache for {}", cached.length, url);
+            return cached;
+        }
+
         if (url.startsWith("s3://")) {
-            // Check in-memory cache first (populated when document was loaded)
-            byte[] cached = documentLoaderService.getCachedBytes(url);
-            if (cached != null) {
-                log.debug("Serving {} bytes from cache for {}", cached.length, url);
-                return cached;
-            }
             // Fall back to live S3 download
             if (s3Client == null) throw new IllegalStateException("S3 client is not configured");
             Matcher m = S3_URI_PATTERN.matcher(url);
@@ -65,11 +65,6 @@ public class DocumentContentController {
             ).asByteArray();
         }
         if (url.startsWith("http://") || url.startsWith("https://")) {
-            byte[] cached = documentLoaderService.getCachedBytes(url);
-            if (cached != null) {
-                log.debug("Serving {} bytes from cache for {}", cached.length, url);
-                return cached;
-            }
             RemoteDocumentResolver.ResolvedRemoteDocument resolved = remoteDocumentResolver.resolve(url);
             log.debug("Resolved remote view request {} -> {} ({})", url, resolved.resolvedUrl(), resolved.mimeType());
             return resolved.bytes();

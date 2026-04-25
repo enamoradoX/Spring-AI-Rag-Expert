@@ -1,5 +1,6 @@
 package guru.springframework.springairagexpert.services;
 
+import java.util.Map;
 import java.util.List;
 
 public interface DocumentLoaderService {
@@ -9,6 +10,12 @@ public interface DocumentLoaderService {
     void loadDocuments(List<String> documentUrls);
 
     void loadDocumentWithMetadata(String documentUrl, java.util.Map<String, Object> metadata);
+
+    /**
+     * Loads an uploaded file directly from raw bytes and stores it in the vector store.
+     * Returns the synthetic document URL used to reference the uploaded file later.
+     */
+    String loadUploadedDocument(String filename, byte[] bytes, Map<String, Object> metadata);
 
     /**
      * Returns the list of all currently loaded document URLs.

@@ -24,6 +24,7 @@ export class AppComponent implements OnInit {
 
   // Document upload
   isDocumentLoading = false;
+  isDragOverDocumentInput = false;
 
   // Shared input
   inputText = '';
@@ -399,6 +400,61 @@ export class AppComponent implements OnInit {
       },
       error: () => {
         this.showStatus('Failed to load document. Please check the URL and try again.', 'error');
+        this.isDocumentLoading = false;
+      }
+    });
+  }
+
+  onDocumentDragOver(event: DragEvent): void {
+    if (this.mode !== 'document') return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOverDocumentInput = true;
+  }
+
+  onDocumentDragLeave(event: DragEvent): void {
+    if (this.mode !== 'document') return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOverDocumentInput = false;
+  }
+
+  onDocumentDrop(event: DragEvent): void {
+    if (this.mode !== 'document') return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOverDocumentInput = false;
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    if (files.length > 1) {
+      this.showStatus('Please drop one document at a time.', 'error');
+      return;
+    }
+
+    this.uploadDroppedFile(files[0]);
+  }
+
+  private uploadDroppedFile(file: File): void {
+    const allowedExtensions = ['pdf', 'docx', 'doc', 'txt'];
+    const extension = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : '';
+    if (!allowedExtensions.includes(extension)) {
+      this.showStatus('Unsupported file type. Allowed: .pdf, .docx, .doc, .txt', 'error');
+      return;
+    }
+
+    this.isDocumentLoading = true;
+    this.documentService.uploadDocumentFile(file).subscribe({
+      next: (response) => {
+        this.showStatus(response.message, response.success ? 'success' : 'error');
+        this.isDocumentLoading = false;
+        if (response.success) {
+          this.inputText = '';
+          this.refreshDocuments();
+        }
+      },
+      error: () => {
+        this.showStatus('Failed to upload document. Please try again.', 'error');
         this.isDocumentLoading = false;
       }
     });
