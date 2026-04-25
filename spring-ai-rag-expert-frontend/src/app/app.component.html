@@ -36,61 +36,207 @@
       <!-- Mode Row -->
       <div class="mode-docs-row">
         <div class="mode-indicator"
-             [ngClass]="mode === 'document' ? 'mode-document' : mode === 's3' ? 'mode-s3' : 'mode-chat'">
-          {{ mode === 'chat' ? '💬 Chat Mode' : mode === 's3' ? '☁️ S3 Upload Mode' : '📄 Document Upload Mode' }}
+             [ngClass]="mode === 'document' ? 'mode-document' : 'mode-chat'">
+          {{ mode === 'chat' ? '💬 Chat Mode' : '📄 Document Upload Mode' }}
         </div>
       </div>
       <!-- Input Section -->
       <div class="input-section">
         <div class="input-group">
-          <div class="shared-input-shell" [class.shared-input-shell-document]="mode === 'document'">
-            <textarea
-              class="form-control"
-              [class.document-drop-target]="mode === 'document'"
-              [class.document-drop-target-active]="mode === 'document' && isDragOverDocumentInput"
-              [class.document-drop-target-with-hint]="mode === 'document'"
-              [(ngModel)]="inputText"
-              (keypress)="onKeyPress($event)"
-              (dragover)="onDocumentDragOver($event)"
-              (dragleave)="onDocumentDragLeave($event)"
-              (drop)="onDocumentDrop($event)"
-              [placeholder]="placeholder"
-              rows="3"
-              [disabled]="isLoading"></textarea>
-            <div class="document-drop-inline-hint" *ngIf="mode === 'document'">
-              Drag &amp; drop a <strong>.pdf</strong>, <strong>.docx</strong>, <strong>.doc</strong>, or <strong>.txt</strong> file here
+          <div class="document-input-column">
+            <div class="document-upload-stack" *ngIf="mode === 'document' && !showS3Settings">
+              <div class="shared-input-shell shared-input-shell-thin">
+                <input
+                  class="document-thin-input"
+                  type="text"
+                  [(ngModel)]="documentUrlInput"
+                  (keydown.enter)="$event.preventDefault(); handleSend()"
+                  [disabled]="isLoading"
+                  placeholder="Enter document URL (e.g., https://example.com/document.pdf)" />
+              </div>
+
+              <div class="shared-input-shell shared-input-shell-thin">
+                <input
+                  class="document-thin-input document-thin-input-s3"
+                  type="text"
+                  [(ngModel)]="documentS3KeyInput"
+                  (keydown.enter)="$event.preventDefault(); handleSend()"
+                  [disabled]="isLoading"
+                  placeholder="Enter S3 key (e.g., docs/help/en-us/my-file.pdf)" />
+              </div>
+
+              <div class="document-drop-zone"
+                   [class.document-drop-zone-active]="isDragOverDocumentInput"
+                   (dragover)="onDocumentDragOver($event)"
+                   (dragleave)="onDocumentDragLeave($event)"
+                   (drop)="onDocumentDrop($event)">
+                <div class="document-drop-zone-title">Drag &amp; Drop Files</div>
+                <div class="document-drop-zone-text">
+                  Drop a <strong>.pdf</strong>, <strong>.docx</strong>, <strong>.doc</strong>, or <strong>.txt</strong> file here
+                </div>
+              </div>
+            </div>
+
+            <div class="s3-config-panel s3-config-panel-inline" *ngIf="mode === 'document' && showS3Settings">
+              <div class="s3-config-panel-header">
+                <div class="s3-config-panel-title">S3 Configuration</div>
+                <div class="s3-config-note">
+                  Credential mode: <strong>{{ s3CredentialLabel }}</strong>
+                </div>
+              </div>
+
+              <div class="s3-config-form">
+                <div class="s3-config-grid">
+                  <label class="s3-config-field">
+                    <span>Bucket Name</span>
+                    <input type="text"
+                           [(ngModel)]="s3ConfigForm.bucketName"
+                           [disabled]="isLoading || isSavingS3Config"
+                           placeholder="my-documents-bucket" />
+                  </label>
+
+                  <label class="s3-config-field">
+                    <span>Region</span>
+                    <input type="text"
+                           [(ngModel)]="s3ConfigForm.region"
+                           [disabled]="isLoading || isSavingS3Config"
+                           placeholder="us-east-1" />
+                  </label>
+
+                  <label class="s3-config-field">
+                    <span>Access Key ID</span>
+                    <input type="text"
+                           [(ngModel)]="s3ConfigForm.accessKeyId"
+                           [disabled]="isLoading || isSavingS3Config"
+                           placeholder="Optional - leave blank for default AWS credentials" />
+                  </label>
+
+                  <label class="s3-config-field">
+                    <span>Secret Access Key</span>
+                    <input type="password"
+                           [(ngModel)]="s3ConfigForm.secretAccessKey"
+                           [disabled]="isLoading || isSavingS3Config"
+                           placeholder="{{ s3Config?.hasSecretAccessKey ? 'Leave blank to keep the current secret' : 'Optional secret access key' }}" />
+                  </label>
+
+                  <label class="s3-config-field s3-config-field-wide">
+                    <span>Endpoint Override</span>
+                    <input type="text"
+                           [(ngModel)]="s3ConfigForm.endpointOverride"
+                           [disabled]="isLoading || isSavingS3Config"
+                           placeholder="Optional - e.g. http://localhost:9000 for MinIO" />
+                  </label>
+                </div>
+
+                <label class="s3-config-checkbox">
+                  <input type="checkbox"
+                         [(ngModel)]="s3ConfigForm.pathStyleAccess"
+                         [disabled]="isLoading || isSavingS3Config" />
+                  <span>Use path-style access (required for MinIO and some S3-compatible services)</span>
+                </label>
+
+                <div class="s3-config-footer">
+                  <div class="s3-config-note">
+                    Save once, then Upload Document can use just the S3 key input.
+                  </div>
+                  <button class="btn btn-s3-save"
+                          type="button"
+                          (click)="saveS3Config()"
+                          [disabled]="isLoading || isSavingS3Config">
+                    {{ isSavingS3Config ? '⏳ Saving...' : '💾 Save S3 Settings' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="shared-input-shell" *ngIf="mode === 'chat'">
+              <textarea
+                class="form-control"
+                [(ngModel)]="inputText"
+                (keypress)="onKeyPress($event)"
+                [placeholder]="placeholder"
+                rows="3"
+                [disabled]="isLoading"></textarea>
+              <p class="hint-text hint-text-chat-under-input">Press Enter to send, Shift+Enter for new line</p>
+            </div>
+
+            <div class="explorer-shell explorer-shell-inline" *ngIf="mode === 'document' && !showS3Settings">
+              <div class="explorer-toolbar explorer-toolbar-inline">
+                <button class="btn btn-explorer-tool" (click)="openExplorerFiles()" [disabled]="isLoading">Browse Files</button>
+                <button class="btn btn-explorer-tool" (click)="openExplorerFolder()" [disabled]="isLoading">Browse Folder</button>
+                <button class="btn btn-explorer-clear" (click)="clearExplorerSelection()" [disabled]="!selectedExplorerFiles.length || isLoading">Clear</button>
+              </div>
+
+              <div class="explorer-selection-bar" *ngIf="selectedExplorerFiles.length > 0">
+                {{ selectedFilesSummary }}
+              </div>
+
+              <div class="explorer-location-bar">
+                <span class="explorer-location-label">Start in:</span>
+                <span class="explorer-location-value">{{ explorerLocationLabel }}</span>
+              </div>
+
+              <div class="explorer-list-shell">
+                <div class="explorer-list-header" *ngIf="selectedExplorerFiles.length > 0">
+                  <span>Name</span>
+                  <span>Type</span>
+                  <span>Size</span>
+                  <span></span>
+                </div>
+
+                <div class="explorer-empty" *ngIf="selectedExplorerFiles.length === 0">
+                  Choose files or a folder from your system to add supported documents to the vector store.
+                </div>
+
+                <div class="explorer-row" *ngFor="let entry of selectedExplorerFiles; let i = index">
+                  <div class="explorer-file-main">
+                    <div class="explorer-file-name">{{ entry.file.name }}</div>
+                    <div class="explorer-file-path">{{ entry.displayPath }}</div>
+                  </div>
+                  <div class="explorer-file-type">{{ entry.typeLabel }}</div>
+                  <div class="explorer-file-size">{{ entry.sizeLabel }}</div>
+                  <button class="btn-icon btn-explorer-remove" (click)="removeExplorerEntry(i)" title="Remove">✕</button>
+                </div>
+              </div>
+
+              <input #filePickerRef type="file" hidden multiple accept=".pdf,.docx,.doc,.txt" (change)="onExplorerFilesSelected($event)" />
+              <input #folderPickerRef type="file" hidden webkitdirectory directory multiple (change)="onExplorerFolderSelected($event)" />
             </div>
           </div>
+
           <div class="button-group">
             <!-- Main action button: context-sensitive -->
             <button class="btn"
-              [ngClass]="mode === 'chat' ? 'btn-send' : mode === 's3' ? 'btn-s3-action' : 'btn-ask'"
+              [ngClass]="mode === 'chat' ? 'btn-send' : 'btn-ask'"
               (click)="mode === 'chat' ? handleSend() : switchToChat()"
               [disabled]="isLoading || (mode === 'chat' && !inputText.trim())">
               <span *ngIf="mode === 'chat'">{{ isChatLoading ? '⏳' : '📤' }} Send</span>
-              <span *ngIf="mode !== 'chat'">💬 Ask a Question</span>
+              <span *ngIf="mode === 'document'">💬 Ask a Question</span>
             </button>
             <!-- Upload Document -->
             <button class="btn btn-upload"
-              (click)="mode === 'document' ? handleSend() : switchToDocument()"
-              [disabled]="isLoading || (mode === 'document' && !inputText.trim())">
-              {{ isDocumentLoading ? '⏳' : '📄' }} Upload Document
+              (click)="mode !== 'document' ? switchToDocument() : (showS3Settings ? toggleS3Settings() : handleSend())"
+              [disabled]="isLoading || (mode === 'document' && !showS3Settings && !documentUrlInput.trim() && !documentS3KeyInput.trim() && selectedExplorerFiles.length === 0)">
+              <span *ngIf="mode !== 'document' || !showS3Settings">{{ (isDocumentLoading || isExplorerLoading) ? '⏳' : '📄' }} Upload Document</span>
+              <span *ngIf="mode === 'document' && showS3Settings">📄 Back to Upload</span>
             </button>
-            <!-- Upload from S3 -->
-            <button class="btn btn-s3"
-              [class.btn-s3-active]="mode === 's3'"
-              (click)="mode === 's3' ? handleSend() : switchToS3()"
-              [disabled]="isLoading || (mode === 's3' && !inputText.trim())">
-              {{ isS3Loading ? '⏳' : '☁️' }}
-              {{ mode === 's3' ? 'Load from S3' : 'Upload from S3' }}
+
+            <button class="btn btn-configure-s3"
+              type="button"
+              (click)="mode === 'document' ? toggleS3Settings() : openS3Configuration()"
+              [disabled]="isLoading || isSavingS3Config">
+              {{ showS3Settings && mode === 'document' ? '⚙️ Hide S3 Settings' : '⚙️ Configure S3' }}
             </button>
           </div>
         </div>
+
         <div class="hint-status-row">
-          <p class="hint-text">Press Enter to send, Shift+Enter for new line</p>
+          <p class="hint-text hint-explorer-info" *ngIf="mode === 'document' && !showS3Settings">
+            Fill in a document URL, an S3 key, and/or choose files below — Upload Document will process whichever inputs are present.
+          </p>
           <p class="hint-text hint-s3-info" *ngIf="s3Config">
-            <span class="s3-dot-inline connected"></span>
-            Bucket: <strong>{{ s3Config.bucket }}</strong> &nbsp;·&nbsp; Host: <strong>{{ s3Config.endpoint }}</strong>
+            <span class="s3-dot-inline" [ngClass]="s3Config.configured ? 'connected' : 'disconnected'"></span>
+            Bucket: <strong>{{ s3Config.bucketName || 'Not set' }}</strong> &nbsp;·&nbsp; Host: <strong>{{ s3HostLabel }}</strong>
           </p>
           <p class="hint-text hint-s3-info hint-s3-error" *ngIf="s3ConfigError">
             <span class="s3-dot-inline disconnected"></span> S3 not configured

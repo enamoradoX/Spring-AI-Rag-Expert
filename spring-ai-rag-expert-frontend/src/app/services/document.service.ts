@@ -13,10 +13,25 @@ export interface DocumentFileType {
 }
 
 export interface S3Config {
-  bucket: string;
-  endpoint: string;
+  bucketName: string | null;
+  accessKeyId: string | null;
+  endpointOverride: string | null;
   region: string;
+  pathStyleAccess: boolean;
+  configured: boolean;
+  hasSecretAccessKey: boolean;
+  usesDefaultCredentials: boolean;
   status: string;
+}
+
+export interface S3ConfigUpdateRequest {
+  bucketName: string;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  endpointOverride: string;
+  pathStyleAccess: boolean;
+  keepSecretAccessKey: boolean;
 }
 
 @Injectable({
@@ -46,6 +61,10 @@ export class DocumentService {
 
   getS3Config(): Observable<S3Config> {
     return this.http.get<S3Config>(`${this.s3ApiUrl}/config`);
+  }
+
+  updateS3Config(config: S3ConfigUpdateRequest): Observable<S3Config> {
+    return this.http.put<S3Config>(`${this.s3ApiUrl}/config`, config);
   }
 
   getDocuments(): Observable<string[]> {
