@@ -43,13 +43,24 @@
       <!-- Input Section -->
       <div class="input-section">
         <div class="input-group">
-          <textarea
-            class="form-control"
-            [(ngModel)]="inputText"
-            (keypress)="onKeyPress($event)"
-            [placeholder]="placeholder"
-            rows="3"
-            [disabled]="isLoading"></textarea>
+          <div class="shared-input-shell" [class.shared-input-shell-document]="mode === 'document'">
+            <textarea
+              class="form-control"
+              [class.document-drop-target]="mode === 'document'"
+              [class.document-drop-target-active]="mode === 'document' && isDragOverDocumentInput"
+              [class.document-drop-target-with-hint]="mode === 'document'"
+              [(ngModel)]="inputText"
+              (keypress)="onKeyPress($event)"
+              (dragover)="onDocumentDragOver($event)"
+              (dragleave)="onDocumentDragLeave($event)"
+              (drop)="onDocumentDrop($event)"
+              [placeholder]="placeholder"
+              rows="3"
+              [disabled]="isLoading"></textarea>
+            <div class="document-drop-inline-hint" *ngIf="mode === 'document'">
+              Drag &amp; drop a <strong>.pdf</strong>, <strong>.docx</strong>, <strong>.doc</strong>, or <strong>.txt</strong> file here
+            </div>
+          </div>
           <div class="button-group">
             <!-- Main action button: context-sensitive -->
             <button class="btn"

@@ -34,6 +34,12 @@ export class DocumentService {
     });
   }
 
+  uploadDocumentFile(file: File): Observable<DocumentLoadResponse> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<DocumentLoadResponse>(`${this.apiUrl}/upload`, formData);
+  }
+
   loadFromS3(key: string): Observable<DocumentLoadResponse> {
     return this.http.post<DocumentLoadResponse>(`${this.s3ApiUrl}/load`, { key });
   }
