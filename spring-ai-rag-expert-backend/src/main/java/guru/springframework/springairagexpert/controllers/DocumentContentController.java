@@ -1,12 +1,13 @@
 package guru.springframework.springairagexpert.controllers;
 
+import guru.springframework.springairagexpert.config.S3ClientFactory;
+import guru.springframework.springairagexpert.config.S3RuntimeConfigService;
 import guru.springframework.springairagexpert.services.DocumentLoaderService;
 import guru.springframework.springairagexpert.services.RemoteDocumentResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.http.MediaType;
@@ -32,9 +33,8 @@ public class DocumentContentController {
     private final ResourceLoader resourceLoader;
     private final DocumentLoaderService documentLoaderService;
     private final RemoteDocumentResolver remoteDocumentResolver;
-
-    @Autowired(required = false)
-    private S3Client s3Client;
+    private final S3ClientFactory s3ClientFactory;
+    private final S3RuntimeConfigService s3RuntimeConfigService;
 
     private static final Tika TIKA = new Tika();
 
@@ -54,15 +54,16 @@ public class DocumentContentController {
 
         if (url.startsWith("s3://")) {
             // Fall back to live S3 download
-            if (s3Client == null) throw new IllegalStateException("S3 client is not configured");
             Matcher m = S3_URI_PATTERN.matcher(url);
             if (!m.matches()) throw new IllegalArgumentException("Invalid S3 URI: " + url);
             String bucket = m.group(1);
             String key = m.group(2);
             log.debug("Fetching s3://{}/{} from S3", bucket, key);
-            return s3Client.getObjectAsBytes(
-                    GetObjectRequest.builder().bucket(bucket).key(key).build()
-            ).asByteArray();
+            try (S3Client s3Client = s3ClientFactory.createClient(s3RuntimeConfigService.getConfig())) {
+                return s3Client.getObjectAsBytes(
+                        GetObjectRequest.builder().bucket(bucket).key(key).build()
+                ).asByteArray();
+            }
         }
         if (url.startsWith("http://") || url.startsWith("https://")) {
             RemoteDocumentResolver.ResolvedRemoteDocument resolved = remoteDocumentResolver.resolve(url);

@@ -1,7 +1,9 @@
 package guru.springframework.springairagexpert.controllers;
 
-import guru.springframework.springairagexpert.config.AwsS3Properties;
+import guru.springframework.springairagexpert.config.S3RuntimeConfigService;
 import guru.springframework.springairagexpert.model.DocumentLoadResponse;
+import guru.springframework.springairagexpert.model.S3ConfigRequest;
+import guru.springframework.springairagexpert.model.S3ConfigResponse;
 import guru.springframework.springairagexpert.model.S3DocumentLoadRequest;
 import guru.springframework.springairagexpert.services.S3DocumentLoaderService;
 import lombok.RequiredArgsConstructor;
@@ -9,7 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/s3")
@@ -19,17 +20,17 @@ import java.util.Map;
 public class S3DocumentLoaderController {
 
     private final S3DocumentLoaderService s3DocumentLoaderService;
-    private final AwsS3Properties awsS3Properties;
+    private final S3RuntimeConfigService s3RuntimeConfigService;
 
     /** Returns S3 connection metadata so the UI can display connection status. */
     @GetMapping("/config")
-    public Map<String, String> getConfig() {
-        return Map.of(
-            "bucket",   awsS3Properties.getBucketName()   != null ? awsS3Properties.getBucketName()   : "",
-            "endpoint", awsS3Properties.getEndpointOverride() != null ? awsS3Properties.getEndpointOverride() : "AWS S3",
-            "region",   awsS3Properties.getRegion()       != null ? awsS3Properties.getRegion()       : "us-east-1",
-            "status",   "connected"
-        );
+    public S3ConfigResponse getConfig() {
+        return S3ConfigResponse.from(s3RuntimeConfigService.getConfig());
+    }
+
+    @PutMapping("/config")
+    public S3ConfigResponse updateConfig(@RequestBody S3ConfigRequest request) {
+        return S3ConfigResponse.from(s3RuntimeConfigService.updateConfig(request));
     }
 
     @PostMapping("/load")
@@ -42,12 +43,10 @@ public class S3DocumentLoaderController {
             }
 
             // Resolve bucket: use request value if provided, otherwise fall back to configured bucket
-            String resolvedBucket = (request.bucketName() != null && !request.bucketName().isBlank())
-                    ? request.bucketName()
-                    : awsS3Properties.getBucketName();
+            String resolvedBucket = s3RuntimeConfigService.resolveBucket(request.bucketName());
 
             if (resolvedBucket == null || resolvedBucket.isBlank()) {
-                return new DocumentLoadResponse("No bucket configured. Set aws.s3.bucketName in application config.", false);
+                return new DocumentLoadResponse("No S3 bucket configured. Open Configure S3 in the app and save a bucket first.", false);
             }
 
             // Load all documents from a prefix (folder)

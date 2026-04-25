@@ -1,5 +1,7 @@
 package guru.springframework.springairagexpert.services;
 
+import guru.springframework.springairagexpert.config.S3ClientFactory;
+import guru.springframework.springairagexpert.config.S3RuntimeConfigService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
@@ -7,7 +9,6 @@ import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.transformer.splitter.TextSplitter;
 import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.core.sync.ResponseTransformer;
@@ -24,10 +25,10 @@ import java.util.regex.Pattern;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnBean(S3Client.class)
 public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
 
-    private final S3Client s3Client;
+    private final S3ClientFactory s3ClientFactory;
+    private final S3RuntimeConfigService s3RuntimeConfigService;
     private final VectorStore vectorStore;
     private final DocumentLoaderService documentLoaderService;
 
@@ -38,31 +39,8 @@ public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
 
     @Override
     public void loadDocumentFromS3(String bucketName, String key) {
-        log.info("Loading document from S3: s3://{}/{}", bucketName, key);
-        String s3Uri = "s3://" + bucketName + "/" + key;
-        Path tempFile = null;
-        try {
-            tempFile = downloadFromS3(bucketName, key);
-
-            // Cache bytes so the document viewer can serve them
-            byte[] bytes = Files.readAllBytes(tempFile);
-            documentLoaderService.cacheBytes(s3Uri, bytes);
-
-            List<String> ids = processDocument(tempFile, Map.of(
-                    "source", "s3",
-                    "bucket", bucketName,
-                    "key", key,
-                    "document_url", s3Uri
-            ));
-
-            documentLoaderService.registerDocumentIds(s3Uri, ids);
-            log.info("Successfully loaded document from S3: {}", s3Uri);
-
-        } catch (Exception e) {
-            log.error("Failed to load document from S3: {}: {}", s3Uri, e.getMessage(), e);
-            throw new RuntimeException("Failed to load S3 document: " + key, e);
-        } finally {
-            cleanupTempFile(tempFile);
+        try (S3Client s3Client = createS3Client()) {
+            loadDocumentFromS3Internal(s3Client, bucketName, key, null);
         }
     }
 
@@ -73,13 +51,15 @@ public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
         int successCount = 0;
         int failureCount = 0;
 
-        for (String key : keys) {
-            try {
-                loadDocumentFromS3(bucketName, key);
-                successCount++;
-            } catch (Exception e) {
-                log.error("Failed to load document s3://{}/{}: {}", bucketName, key, e.getMessage());
-                failureCount++;
+        try (S3Client s3Client = createS3Client()) {
+            for (String key : keys) {
+                try {
+                    loadDocumentFromS3Internal(s3Client, bucketName, key, null);
+                    successCount++;
+                } catch (Exception e) {
+                    log.error("Failed to load document s3://{}/{}: {}", bucketName, key, e.getMessage());
+                    failureCount++;
+                }
             }
         }
 
@@ -88,31 +68,8 @@ public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
 
     @Override
     public void loadDocumentFromS3WithMetadata(String bucketName, String key, Map<String, Object> metadata) {
-        log.info("Loading document with custom metadata from S3: s3://{}/{}", bucketName, key);
-        String s3Uri = "s3://" + bucketName + "/" + key;
-        Path tempFile = null;
-        try {
-            tempFile = downloadFromS3(bucketName, key);
-
-            byte[] bytes = Files.readAllBytes(tempFile);
-            documentLoaderService.cacheBytes(s3Uri, bytes);
-
-            Map<String, Object> allMetadata = new java.util.HashMap<>();
-            allMetadata.put("source", "s3");
-            allMetadata.put("bucket", bucketName);
-            allMetadata.put("key", key);
-            allMetadata.put("document_url", s3Uri);
-            if (metadata != null) allMetadata.putAll(metadata);
-
-            List<String> ids = processDocument(tempFile, allMetadata);
-            documentLoaderService.registerDocumentIds(s3Uri, ids);
-            log.info("Successfully loaded document with metadata from S3: {}", s3Uri);
-
-        } catch (Exception e) {
-            log.error("Failed to load document from S3: {}: {}", s3Uri, e.getMessage(), e);
-            throw new RuntimeException("Failed to load S3 document: " + key, e);
-        } finally {
-            cleanupTempFile(tempFile);
+        try (S3Client s3Client = createS3Client()) {
+            loadDocumentFromS3Internal(s3Client, bucketName, key, metadata);
         }
     }
 
@@ -120,7 +77,7 @@ public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
     public void loadDocumentsFromS3Prefix(String bucketName, String prefix) {
         log.info("Loading all documents from S3 prefix: s3://{}/{}", bucketName, prefix);
 
-        try {
+        try (S3Client s3Client = createS3Client()) {
             ListObjectsV2Request listRequest = ListObjectsV2Request.builder()
                     .bucket(bucketName)
                     .prefix(prefix)
@@ -136,14 +93,13 @@ public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
 
             for (S3Object object : objects) {
                 String key = object.key();
-                // Skip directories (keys ending with '/')
                 if (key.endsWith("/")) {
                     log.debug("Skipping directory: {}", key);
                     continue;
                 }
 
                 try {
-                    loadDocumentFromS3(bucketName, key);
+                    loadDocumentFromS3Internal(s3Client, bucketName, key, null);
                     successCount++;
                 } catch (Exception e) {
                     log.error("Failed to load document {}: {}", key, e.getMessage());
@@ -174,11 +130,44 @@ public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
         loadDocumentFromS3(bucketName, key);
     }
 
+    private void loadDocumentFromS3Internal(S3Client s3Client, String bucketName, String key, Map<String, Object> metadata) {
+        log.info("Loading document from S3: s3://{}/{}", bucketName, key);
+        String s3Uri = "s3://" + bucketName + "/" + key;
+        Path tempFile = null;
+        try {
+            tempFile = downloadFromS3(s3Client, bucketName, key);
+
+            // Cache bytes so the document viewer can serve them
+            byte[] bytes = Files.readAllBytes(tempFile);
+            documentLoaderService.cacheBytes(s3Uri, bytes);
+
+            Map<String, Object> allMetadata = new java.util.HashMap<>();
+            allMetadata.put("source", "s3");
+            allMetadata.put("bucket", bucketName);
+            allMetadata.put("key", key);
+            allMetadata.put("document_url", s3Uri);
+            if (metadata != null) {
+                allMetadata.putAll(metadata);
+            }
+
+            List<String> ids = processDocument(tempFile, allMetadata);
+
+            documentLoaderService.registerDocumentIds(s3Uri, ids);
+            log.info("Successfully loaded document from S3: {}", s3Uri);
+
+        } catch (Exception e) {
+            log.error("Failed to load document from S3: {}: {}", s3Uri, e.getMessage(), e);
+            throw new RuntimeException("Failed to load S3 document: " + key, e);
+        } finally {
+            cleanupTempFile(tempFile);
+        }
+    }
+
     /**
      * Download a file from S3 to a temporary location.
      * Validates that the downloaded content matches the expected file type (not an HTML error page).
      */
-    private Path downloadFromS3(String bucketName, String key) throws IOException {
+    private Path downloadFromS3(S3Client s3Client, String bucketName, String key) throws IOException {
         log.debug("Downloading from S3: s3://{}/{}", bucketName, key);
 
         // Create a unique temp path; delete the empty file so ResponseTransformer.toFile() can write to it
@@ -217,6 +206,10 @@ public class S3DocumentLoaderServiceImpl implements S3DocumentLoaderService {
 
         log.debug("Downloaded to temporary file: {}", tempFile);
         return tempFile;
+    }
+
+    private S3Client createS3Client() {
+        return s3ClientFactory.createClient(s3RuntimeConfigService.getConfig());
     }
 
     /**
