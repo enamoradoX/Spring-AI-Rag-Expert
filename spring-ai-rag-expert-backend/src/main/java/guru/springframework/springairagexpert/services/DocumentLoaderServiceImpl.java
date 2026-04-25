@@ -16,6 +16,7 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Service;
+import java.util.UUID;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class DocumentLoaderServiceImpl implements DocumentLoaderService {
 
     static final String DOCUMENT_URL_KEY = "document_url";
+    private static final String UPLOAD_URL_PREFIX = "upload://";
 
     final VectorStore vectorStore;
     final ResourceLoader resourceLoader;
@@ -184,6 +186,57 @@ public class DocumentLoaderServiceImpl implements DocumentLoaderService {
         } catch (Exception e) {
             log.error("Failed to load document from {}: {}", documentUrl, e.getMessage(), e);
             throw new RuntimeException("Failed to load document: " + documentUrl, e);
+        }
+    }
+
+    @Override
+    public String loadUploadedDocument(String filename, byte[] bytes, Map<String, Object> metadata) {
+        if (bytes == null || bytes.length == 0) {
+            throw new IllegalArgumentException("Uploaded document is empty");
+        }
+
+        String safeFilename = (filename == null || filename.isBlank()) ? "uploaded-file" : filename.trim();
+        String documentUrl = UPLOAD_URL_PREFIX + UUID.randomUUID() + "/" + safeFilename;
+
+        log.info("Loading uploaded document: {} ({} bytes)", safeFilename, bytes.length);
+
+        try {
+            ByteArrayResource resource = new ByteArrayResource(bytes) {
+                @Override
+                public String getFilename() {
+                    return safeFilename;
+                }
+            };
+
+            TikaDocumentReader documentReader = new TikaDocumentReader(resource);
+            List<Document> documents = documentReader.get();
+
+            documents.forEach(doc -> {
+                doc.getMetadata().put(DOCUMENT_URL_KEY, documentUrl);
+                doc.getMetadata().put("source", "upload");
+                doc.getMetadata().put("filename", safeFilename);
+                if (metadata != null) {
+                    metadata.forEach((key, value) -> doc.getMetadata().put(key, value));
+                }
+            });
+
+            TextSplitter textSplitter = new TokenTextSplitter(chunkSize, 50, 5, 10000, true);
+            List<Document> splitDocuments = textSplitter.apply(documents);
+
+            vectorStore.add(splitDocuments);
+
+            List<String> ids = splitDocuments.stream()
+                    .map(Document::getId)
+                    .toList();
+
+            bytesCache.put(documentUrl, bytes);
+            loadedDocuments.put(documentUrl, ids);
+
+            log.info("Successfully loaded uploaded document: {} as {}", safeFilename, documentUrl);
+            return documentUrl;
+        } catch (Exception e) {
+            log.error("Failed to load uploaded document {}: {}", safeFilename, e.getMessage(), e);
+            throw new RuntimeException("Failed to load uploaded document: " + safeFilename, e);
         }
     }
 
