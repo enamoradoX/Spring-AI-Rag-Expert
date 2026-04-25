@@ -167,15 +167,21 @@ header p   { margin: 0; font-size: 1em; color: #6a7d9e; letter-spacing: 0.3px; }
   width: 100%;
   gap: 0;
 }
-.input-section .input-group textarea.form-control {
+.shared-input-shell {
+  position: relative;
   flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+}
+.input-section .input-group textarea.form-control {
+  width: 100%;
   resize: none;
   min-height: 82px;
   max-height: 200px;
   background: #1e2230;
   color: #dce3ee;
   border: 1px solid #2e3447;
-  border-radius: 8px 0 0 8px;
+  border-radius: 10px;
   padding: 12px 14px;
   font-size: 14px;
   font-family: inherit;
@@ -184,6 +190,34 @@ header p   { margin: 0; font-size: 1em; color: #6a7d9e; letter-spacing: 0.3px; }
 }
 .input-section .input-group textarea.form-control::placeholder { color: #4e5e78; }
 .input-section .input-group textarea.form-control:focus { border-color: #3d5a8a; }
+.input-section .input-group textarea.form-control.document-drop-target-with-hint {
+  padding-bottom: 34px;
+}
+.input-section .input-group textarea.form-control.document-drop-target {
+  border-style: dashed;
+  border-width: 1px;
+}
+.input-section .input-group textarea.form-control.document-drop-target-active {
+  border-color: #8ab4e8;
+  background: #20283a;
+  box-shadow: inset 0 0 0 1px rgba(138, 180, 232, 0.25), 0 0 0 3px rgba(91, 143, 212, 0.15);
+}
+.document-drop-inline-hint {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 9px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  color: #6a7d9e;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.92;
+}
+.document-drop-inline-hint strong {
+  color: #8ea7c7;
+  font-weight: 700;
+}
 
 /* ── Buttons ── */
 .btn {
@@ -201,7 +235,7 @@ header p   { margin: 0; font-size: 1em; color: #6a7d9e; letter-spacing: 0.3px; }
 .button-group {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   margin-left: 10px;
   flex-shrink: 0;
   width: 180px;
@@ -215,9 +249,12 @@ header p   { margin: 0; font-size: 1em; color: #6a7d9e; letter-spacing: 0.3px; }
   box-sizing: border-box;
   padding-left: 0;
   padding-right: 0;
+  min-height: 42px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.03), 0 6px 18px rgba(0,0,0,0.18);
 }
 
 .btn-send {
@@ -231,6 +268,13 @@ header p   { margin: 0; font-size: 1em; color: #6a7d9e; letter-spacing: 0.3px; }
   border-color: #3a5ca0;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(58,92,160,0.3);
+}
+.btn-send:active:not(:disabled),
+.btn-ask:active:not(:disabled),
+.btn-upload:active:not(:disabled),
+.btn-s3:active:not(:disabled),
+.btn-s3-action:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .btn-ask {
