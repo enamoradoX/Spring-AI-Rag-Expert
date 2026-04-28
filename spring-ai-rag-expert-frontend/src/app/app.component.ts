@@ -1,5 +1,12 @@
 ﻿import { Component, OnInit, HostListener, ElementRef, ViewChild } from '@angular/core';
 import { ChatService } from './services/chat.service';
+import {
+  AnalyticsService,
+  ChatAnalyticsModelSummary,
+  ChatAnalyticsOperationSummary,
+  ChatAnalyticsSummaryResponse,
+  ChatUsageEvent
+} from './services/analytics.service';
 import { DocumentService, S3Config, S3ConfigUpdateRequest } from './services/document.service';
 import { PdfViewerComponent } from './pdf-viewer/pdf-viewer.component';
 import { DocxViewerComponent } from './docx-viewer/docx-viewer.component';
@@ -47,7 +54,13 @@ export class AppComponent implements OnInit {
 
   // Shared input
   inputText = '';
-  mode: 'chat' | 'document' | 'configuration' = 'chat';
+  mode: 'chat' | 'document' | 'configuration' | 'analytics' = 'chat';
+
+  // Analytics
+  analyticsSummary: ChatAnalyticsSummaryResponse | null = null;
+  isAnalyticsLoading = false;
+  analyticsError = '';
+  analyticsLastUpdated: Date | null = null;
 
   // Single unified status alert
   statusMessage = '';
@@ -98,6 +111,7 @@ export class AppComponent implements OnInit {
 
   constructor(
     private chatService: ChatService,
+    private analyticsService: AnalyticsService,
     private documentService: DocumentService,
     private elementRef: ElementRef
   ) {}
@@ -238,7 +252,30 @@ export class AppComponent implements OnInit {
     if (this.mode === 'document' || this.mode === 'configuration') {
       return this.isDocumentLoading || this.isExplorerLoading || this.isS3Loading || this.isSavingS3Config;
     }
+    if (this.mode === 'analytics') {
+      return this.isAnalyticsLoading;
+    }
     return this.isChatLoading;
+  }
+
+  get analyticsOverview() {
+    return this.analyticsSummary?.overview ?? null;
+  }
+
+  get analyticsOperations(): ChatAnalyticsOperationSummary[] {
+    return this.analyticsSummary?.byOperation ?? [];
+  }
+
+  get analyticsModels(): ChatAnalyticsModelSummary[] {
+    return this.analyticsSummary?.byModel ?? [];
+  }
+
+  get analyticsRecentCalls(): ChatUsageEvent[] {
+    return this.analyticsSummary?.recentCalls ?? [];
+  }
+
+  get analyticsHasData(): boolean {
+    return !!this.analyticsSummary && (this.analyticsOverview?.totalCalls ?? 0) > 0;
   }
 
   get s3HostLabel(): string {
@@ -263,9 +300,44 @@ export class AppComponent implements OnInit {
     this.showS3Settings = false;
   }
 
+  switchToAnalytics(): void {
+    this.mode = 'analytics';
+    this.showS3Settings = false;
+    if (!this.analyticsSummary && !this.isAnalyticsLoading) {
+      this.loadAnalyticsSummary();
+    }
+  }
+
+  refreshAnalytics(): void {
+    this.loadAnalyticsSummary(true);
+  }
+
   handleSend() {
     if (this.mode === 'chat') this.askQuestion();
-    else this.loadDocument();
+    else if (this.mode === 'document') this.loadDocument();
+  }
+
+  private loadAnalyticsSummary(isManualRefresh = false): void {
+    this.isAnalyticsLoading = true;
+    this.analyticsError = '';
+
+    this.analyticsService.getChatAnalytics().subscribe({
+      next: (summary) => {
+        this.analyticsSummary = summary;
+        this.analyticsLastUpdated = new Date();
+        this.isAnalyticsLoading = false;
+        if (isManualRefresh) {
+          this.showStatus('Analytics refreshed.', 'success');
+        }
+      },
+      error: (error) => {
+        this.isAnalyticsLoading = false;
+        this.analyticsError = error?.error?.message || 'Failed to load analytics.';
+        if (isManualRefresh) {
+          this.showStatus(this.analyticsError, 'error');
+        }
+      }
+    });
   }
 
   openExplorerFiles(): void {

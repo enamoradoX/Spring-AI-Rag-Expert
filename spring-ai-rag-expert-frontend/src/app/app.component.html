@@ -36,8 +36,8 @@
       <!-- Mode Row -->
       <div class="mode-docs-row">
         <div class="mode-indicator"
-             [ngClass]="mode === 'chat' ? 'mode-chat' : (mode === 'configuration' ? 'mode-configuration' : 'mode-document')">
-          {{ mode === 'chat' ? '💬 Chat Mode' : (mode === 'configuration' ? '⚙️ Configuration Mode' : '📄 Document Upload Mode') }}
+             [ngClass]="mode === 'chat' ? 'mode-chat' : (mode === 'configuration' ? 'mode-configuration' : (mode === 'analytics' ? 'mode-analytics' : 'mode-document'))">
+          {{ mode === 'chat' ? '💬 Chat Mode' : (mode === 'configuration' ? '⚙️ Configuration Mode' : (mode === 'analytics' ? '📊 Analytics Mode' : '📄 Document Upload Mode')) }}
         </div>
       </div>
       <!-- Input Section -->
@@ -149,6 +149,166 @@
               </div>
             </div>
 
+            <div class="analytics-panel" *ngIf="mode === 'analytics'">
+              <div class="analytics-panel-header">
+                <div>
+                  <div class="analytics-panel-title">Chat Analytics</div>
+                  <div class="analytics-panel-subtitle">
+                    Token usage, latency, and estimated model cost from the backend analytics summary.
+                  </div>
+                </div>
+                <button class="btn btn-analytics-refresh"
+                        type="button"
+                        (click)="refreshAnalytics()"
+                        [disabled]="isAnalyticsLoading">
+                  {{ isAnalyticsLoading ? '⏳ Refreshing...' : '🔄 Refresh Analytics' }}
+                </button>
+              </div>
+
+              <div class="analytics-loading" *ngIf="isAnalyticsLoading && !analyticsSummary">
+                Loading analytics...
+              </div>
+
+              <div class="analytics-error" *ngIf="analyticsError && !isAnalyticsLoading">
+                {{ analyticsError }}
+              </div>
+
+              <div class="analytics-content" *ngIf="analyticsOverview && !analyticsError">
+                <div class="analytics-last-updated" *ngIf="analyticsLastUpdated">
+                  Last refreshed: {{ analyticsLastUpdated | date:'short' }}
+                </div>
+
+                <div class="analytics-overview-grid">
+                  <div class="analytics-card">
+                    <span class="analytics-card-label">Total Calls</span>
+                    <strong class="analytics-card-value">{{ analyticsOverview.totalCalls }}</strong>
+                  </div>
+                  <div class="analytics-card">
+                    <span class="analytics-card-label">Prompt Tokens</span>
+                    <strong class="analytics-card-value">{{ analyticsOverview.totalPromptTokens | number }}</strong>
+                  </div>
+                  <div class="analytics-card">
+                    <span class="analytics-card-label">Completion Tokens</span>
+                    <strong class="analytics-card-value">{{ analyticsOverview.totalCompletionTokens | number }}</strong>
+                  </div>
+                  <div class="analytics-card">
+                    <span class="analytics-card-label">Total Tokens</span>
+                    <strong class="analytics-card-value">{{ analyticsOverview.totalTokens | number }}</strong>
+                  </div>
+                  <div class="analytics-card">
+                    <span class="analytics-card-label">Estimated Cost</span>
+                    <strong class="analytics-card-value">{{ analyticsOverview.totalEstimatedCostUsd | currency:'USD':'symbol':'1.4-4' }}</strong>
+                  </div>
+                  <div class="analytics-card">
+                    <span class="analytics-card-label">Avg Latency</span>
+                    <strong class="analytics-card-value">{{ analyticsOverview.averageLatencyMs | number:'1.0-1' }} ms</strong>
+                  </div>
+                </div>
+
+                <div class="analytics-empty-state" *ngIf="!analyticsHasData">
+                  No chat analytics recorded yet. Ask a question to generate usage data.
+                </div>
+
+                <div class="analytics-section" *ngIf="analyticsOperations.length > 0">
+                  <div class="analytics-section-title">By Operation</div>
+                  <div class="analytics-table-shell">
+                    <table class="analytics-table">
+                      <thead>
+                        <tr>
+                          <th>Operation</th>
+                          <th>Calls</th>
+                          <th>Prompt</th>
+                          <th>Completion</th>
+                          <th>Total</th>
+                          <th>Cost</th>
+                          <th>Avg Latency</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let item of analyticsOperations">
+                          <td>{{ item.operation }}</td>
+                          <td>{{ item.callCount }}</td>
+                          <td>{{ item.promptTokens | number }}</td>
+                          <td>{{ item.completionTokens | number }}</td>
+                          <td>{{ item.totalTokens | number }}</td>
+                          <td>{{ item.estimatedCostUsd | currency:'USD':'symbol':'1.4-4' }}</td>
+                          <td>{{ item.averageLatencyMs | number:'1.0-1' }} ms</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="analytics-section" *ngIf="analyticsModels.length > 0">
+                  <div class="analytics-section-title">By Model</div>
+                  <div class="analytics-table-shell">
+                    <table class="analytics-table">
+                      <thead>
+                        <tr>
+                          <th>Provider</th>
+                          <th>Model</th>
+                          <th>Calls</th>
+                          <th>Total Tokens</th>
+                          <th>Cost</th>
+                          <th>Avg Latency</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let item of analyticsModels">
+                          <td>{{ item.provider }}</td>
+                          <td>{{ item.model }}</td>
+                          <td>{{ item.callCount }}</td>
+                          <td>{{ item.totalTokens | number }}</td>
+                          <td>{{ item.estimatedCostUsd | currency:'USD':'symbol':'1.4-4' }}</td>
+                          <td>{{ item.averageLatencyMs | number:'1.0-1' }} ms</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="analytics-section" *ngIf="analyticsRecentCalls.length > 0">
+                  <div class="analytics-section-title">Recent Calls</div>
+                  <div class="analytics-table-shell analytics-table-shell-recent">
+                    <table class="analytics-table analytics-table-recent">
+                      <thead>
+                        <tr>
+                          <th>Timestamp</th>
+                          <th>Provider</th>
+                          <th>Model</th>
+                          <th>Operation</th>
+                          <th>Prompt</th>
+                          <th>Completion</th>
+                          <th>Total</th>
+                          <th>Latency</th>
+                          <th>Cost</th>
+                          <th>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr *ngFor="let event of analyticsRecentCalls">
+                          <td>{{ event.timestamp | date:'short' }}</td>
+                          <td>{{ event.provider }}</td>
+                          <td>{{ event.model }}</td>
+                          <td>{{ event.operation }}</td>
+                          <td>{{ event.promptTokens | number }}</td>
+                          <td>{{ event.completionTokens | number }}</td>
+                          <td>{{ event.totalTokens | number }}</td>
+                          <td>{{ event.latencyMs | number:'1.0-0' }} ms</td>
+                          <td>{{ event.estimatedCostUsd | currency:'USD':'symbol':'1.4-4' }}</td>
+                          <td>
+                            <span class="analytics-status-pill" [ngClass]="event.success ? 'analytics-status-success' : 'analytics-status-error'">
+                              {{ event.success ? 'Success' : 'Error' }}
+                            </span>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="shared-input-shell" *ngIf="mode === 'chat'">
               <textarea
                 class="form-control"
@@ -220,6 +380,13 @@
               {{ (isDocumentLoading || isExplorerLoading) ? '⏳' : '📄' }} Upload Document
             </button>
 
+            <button class="btn btn-analytics"
+              type="button"
+              (click)="switchToAnalytics()"
+              [disabled]="isAnalyticsLoading || mode === 'analytics'">
+              📊 Analytics
+            </button>
+
             <button class="btn btn-configure-s3"
               type="button"
               (click)="openS3Configuration()"
@@ -232,6 +399,9 @@
         <div class="hint-status-row">
           <p class="hint-text hint-explorer-info" *ngIf="mode === 'document'">
             Fill in a document URL, an S3 key, and/or choose files below — Upload Document will process whichever inputs are present.
+          </p>
+          <p class="hint-text hint-analytics-info" *ngIf="mode === 'analytics'">
+            Review answer vs. highlight usage, compare models, then ask another question and refresh to see the totals change.
           </p>
           <p class="hint-text hint-s3-info" *ngIf="s3Config">
             <span class="s3-dot-inline" [ngClass]="s3Config.configured ? 'connected' : 'disconnected'"></span>
