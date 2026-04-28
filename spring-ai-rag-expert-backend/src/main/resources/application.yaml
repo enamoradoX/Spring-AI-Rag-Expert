@@ -41,3 +41,23 @@ aws:
     endpoint-override: ${S3_END_POINT_OVERRIDE:OR_YOUR_OWN_ENDPOINT_OVERRIDE}
     path-style-access: true
     region: us-east-1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+chat:
+  analytics:
+    enabled: true
+    max-recent-calls: 25
+    provider: unknown
+    model: unknown
+    pricing:
+      prompt-cost-per-1m-tokens: 0
+      completion-cost-per-1m-tokens: 0
+

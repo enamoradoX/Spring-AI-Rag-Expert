@@ -47,7 +47,7 @@ export class AppComponent implements OnInit {
 
   // Shared input
   inputText = '';
-  mode: 'chat' | 'document' = 'chat';
+  mode: 'chat' | 'document' | 'configuration' = 'chat';
 
   // Single unified status alert
   statusMessage = '';
@@ -125,14 +125,9 @@ export class AppComponent implements OnInit {
     });
   }
 
-  toggleS3Settings(): void {
-    this.showS3Settings = !this.showS3Settings;
-  }
 
   openS3Configuration(): void {
-    if (this.mode !== 'document') {
-      this.switchToDocument();
-    }
+    this.mode = 'configuration';
     this.showS3Settings = true;
   }
 
@@ -240,7 +235,9 @@ export class AppComponent implements OnInit {
   }
 
   get isLoading(): boolean {
-    if (this.mode === 'document') return this.isDocumentLoading || this.isExplorerLoading || this.isS3Loading;
+    if (this.mode === 'document' || this.mode === 'configuration') {
+      return this.isDocumentLoading || this.isExplorerLoading || this.isS3Loading || this.isSavingS3Config;
+    }
     return this.isChatLoading;
   }
 

@@ -157,6 +157,7 @@ header p   { margin: 0; font-size: 1em; color: #6a7d9e; letter-spacing: 0.3px; }
 }
 .mode-chat     { background: #1a2540; color: #5b8fd4; border: 1px solid #2b3d60; }
 .mode-document { background: #221a38; color: #9b78d4; border: 1px solid #3a2a5e; }
+.mode-configuration { background: #1f2636; color: #8fb5e8; border: 1px solid #344967; }
 .mode-s3       { background: #2a2010; color: #c49040; border: 1px solid #4a3818; }
 
 /* ── Input section ── */
