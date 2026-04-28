@@ -25,3 +25,11 @@ sfg:
   aiapp:
     chunk-size: 800  # text-embedding-3-small supports up to 8191 tokens
 
+chat:
+  analytics:
+    provider: openai
+    model: gpt-4-turbo
+    pricing:
+      prompt-cost-per-1m-tokens: 10.0
+      completion-cost-per-1m-tokens: 30.0
+
