@@ -4,6 +4,9 @@ import guru.springframework.springairagexpert.model.Answer;
 import guru.springframework.springairagexpert.model.Question;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.metadata.ChatGenerationMetadata;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.Usage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
@@ -28,9 +31,16 @@ public class OpenAIServiceImpl implements OpenAIService {
 
     final ChatModel chatModel;
     final VectorStore vectorStore;
+    final ChatUsageAnalyticsService chatUsageAnalyticsService;
 
     @Value("classpath:/templates/rag-prompt-template.st")
     private Resource ragPromptTemplate;
+
+    @Value("${chat.analytics.provider:unknown}")
+    private String analyticsProvider;
+
+    @Value("${chat.analytics.model:unknown}")
+    private String configuredChatModel;
 
     @Override
     public Answer getAnswer(Question question) {
@@ -88,10 +98,8 @@ public class OpenAIServiceImpl implements OpenAIService {
         );
 
         log.info("Sending prompt to chat model (this may take a while with local models)...");
-        long llmStart = System.currentTimeMillis();
-        ChatResponse response = chatModel.call(prompt);
+        ChatResponse response = callChatModel(prompt, "answer");
         String answerText = response.getResult().getOutput().getText();
-        log.info("Chat model responded in {}ms", System.currentTimeMillis() - llmStart);
 
         log.info("Extracting highlights from primary document chunks...");
         long hlStart = System.currentTimeMillis();
@@ -128,7 +136,7 @@ public class OpenAIServiceImpl implements OpenAIService {
                 %s
                 """.formatted(answer, String.join("\n---\n", sourceDocs));
 
-        ChatResponse highlightResponse = chatModel.call(new Prompt(extractPrompt));
+        ChatResponse highlightResponse = callChatModel(new Prompt(extractPrompt), "highlight");
         String raw = highlightResponse.getResult().getOutput().getText();
         if (raw == null || raw.isBlank()) return List.of();
 
@@ -137,5 +145,57 @@ public class OpenAIServiceImpl implements OpenAIService {
                 .filter(s -> s.length() > 10)
                 .limit(2)
                 .toList();
+    }
+
+    private ChatResponse callChatModel(Prompt prompt, String operation) {
+        long startedAt = System.currentTimeMillis();
+        try {
+            ChatResponse response = chatModel.call(prompt);
+            long latencyMs = System.currentTimeMillis() - startedAt;
+            recordChatUsage(response, operation, latencyMs, true);
+            log.info("Chat model responded in {}ms for {}", latencyMs, operation);
+            return response;
+        }
+        catch (RuntimeException ex) {
+            long latencyMs = System.currentTimeMillis() - startedAt;
+            chatUsageAnalyticsService.recordUsage(
+                    analyticsProvider,
+                    configuredChatModel,
+                    operation,
+                    0,
+                    0,
+                    0,
+                    latencyMs,
+                    false,
+                    null,
+                    null
+            );
+            throw ex;
+        }
+    }
+
+    private void recordChatUsage(ChatResponse response, String operation, long latencyMs, boolean success) {
+        ChatResponseMetadata metadata = response != null ? response.getMetadata() : null;
+        Usage usage = metadata != null ? metadata.getUsage() : null;
+        ChatGenerationMetadata generationMetadata = response != null && response.getResult() != null
+                ? response.getResult().getMetadata()
+                : null;
+
+        String model = metadata != null && metadata.getModel() != null && !metadata.getModel().isBlank()
+                ? metadata.getModel()
+                : configuredChatModel;
+
+        chatUsageAnalyticsService.recordUsage(
+                analyticsProvider,
+                model,
+                operation,
+                usage != null ? usage.getPromptTokens() : null,
+                usage != null ? usage.getCompletionTokens() : null,
+                usage != null ? usage.getTotalTokens() : null,
+                latencyMs,
+                success,
+                generationMetadata != null ? generationMetadata.getFinishReason() : null,
+                metadata != null ? metadata.getId() : null
+        );
     }
 }

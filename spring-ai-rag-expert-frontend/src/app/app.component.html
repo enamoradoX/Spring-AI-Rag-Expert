@@ -36,15 +36,15 @@
       <!-- Mode Row -->
       <div class="mode-docs-row">
         <div class="mode-indicator"
-             [ngClass]="mode === 'document' ? 'mode-document' : 'mode-chat'">
-          {{ mode === 'chat' ? '💬 Chat Mode' : '📄 Document Upload Mode' }}
+             [ngClass]="mode === 'chat' ? 'mode-chat' : (mode === 'configuration' ? 'mode-configuration' : 'mode-document')">
+          {{ mode === 'chat' ? '💬 Chat Mode' : (mode === 'configuration' ? '⚙️ Configuration Mode' : '📄 Document Upload Mode') }}
         </div>
       </div>
       <!-- Input Section -->
       <div class="input-section">
         <div class="input-group">
           <div class="document-input-column">
-            <div class="document-upload-stack" *ngIf="mode === 'document' && !showS3Settings">
+            <div class="document-upload-stack" *ngIf="mode === 'document'">
               <div class="shared-input-shell shared-input-shell-thin">
                 <input
                   class="document-thin-input"
@@ -77,7 +77,7 @@
               </div>
             </div>
 
-            <div class="s3-config-panel s3-config-panel-inline" *ngIf="mode === 'document' && showS3Settings">
+            <div class="s3-config-panel s3-config-panel-inline" *ngIf="mode === 'configuration'">
               <div class="s3-config-panel-header">
                 <div class="s3-config-panel-title">S3 Configuration</div>
                 <div class="s3-config-note">
@@ -160,7 +160,7 @@
               <p class="hint-text hint-text-chat-under-input">Press Enter to send, Shift+Enter for new line</p>
             </div>
 
-            <div class="explorer-shell explorer-shell-inline" *ngIf="mode === 'document' && !showS3Settings">
+            <div class="explorer-shell explorer-shell-inline" *ngIf="mode === 'document'">
               <div class="explorer-toolbar explorer-toolbar-inline">
                 <button class="btn btn-explorer-tool" (click)="openExplorerFiles()" [disabled]="isLoading">Browse Files</button>
                 <button class="btn btn-explorer-tool" (click)="openExplorerFolder()" [disabled]="isLoading">Browse Folder</button>
@@ -211,27 +211,26 @@
               (click)="mode === 'chat' ? handleSend() : switchToChat()"
               [disabled]="isLoading || (mode === 'chat' && !inputText.trim())">
               <span *ngIf="mode === 'chat'">{{ isChatLoading ? '⏳' : '📤' }} Send</span>
-              <span *ngIf="mode === 'document'">💬 Ask a Question</span>
+              <span *ngIf="mode !== 'chat'">💬 Ask a Question</span>
             </button>
             <!-- Upload Document -->
             <button class="btn btn-upload"
-              (click)="mode !== 'document' ? switchToDocument() : (showS3Settings ? toggleS3Settings() : handleSend())"
-              [disabled]="isLoading || (mode === 'document' && !showS3Settings && !documentUrlInput.trim() && !documentS3KeyInput.trim() && selectedExplorerFiles.length === 0)">
-              <span *ngIf="mode !== 'document' || !showS3Settings">{{ (isDocumentLoading || isExplorerLoading) ? '⏳' : '📄' }} Upload Document</span>
-              <span *ngIf="mode === 'document' && showS3Settings">📄 Back to Upload</span>
+              (click)="mode === 'document' ? handleSend() : switchToDocument()"
+              [disabled]="isLoading || (mode === 'document' && !documentUrlInput.trim() && !documentS3KeyInput.trim() && selectedExplorerFiles.length === 0)">
+              {{ (isDocumentLoading || isExplorerLoading) ? '⏳' : '📄' }} Upload Document
             </button>
 
             <button class="btn btn-configure-s3"
               type="button"
-              (click)="mode === 'document' ? toggleS3Settings() : openS3Configuration()"
-              [disabled]="isLoading || isSavingS3Config">
-              {{ showS3Settings && mode === 'document' ? '⚙️ Hide S3 Settings' : '⚙️ Configure S3' }}
+              (click)="openS3Configuration()"
+              [disabled]="isLoading || isSavingS3Config || mode === 'configuration'">
+              ⚙️ Configure S3
             </button>
           </div>
         </div>
 
         <div class="hint-status-row">
-          <p class="hint-text hint-explorer-info" *ngIf="mode === 'document' && !showS3Settings">
+          <p class="hint-text hint-explorer-info" *ngIf="mode === 'document'">
             Fill in a document URL, an S3 key, and/or choose files below — Upload Document will process whichever inputs are present.
           </p>
           <p class="hint-text hint-s3-info" *ngIf="s3Config">
